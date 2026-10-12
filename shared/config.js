@@ -46,4 +46,4 @@ export const POWERUPS = {
 
 // Wo läuft der Spielserver? Leer = gleiche Adresse wie die Webseite (lokal, Tunnel).
 // Auf Vercel liegt nur die Webseite – der Server läuft auf Render.
-export const GAME_SERVER_URL = 'https://bomb-party.onrender.com';
+export const GAME_SERVER_URL = 'https://cons-pig-drill-stock.trycloudflare.com'; // übergangsweise Laptop-Tunnel → später Render
