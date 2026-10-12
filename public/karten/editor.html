@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Charakterkarten – Editor</title>
+  <link rel="stylesheet" href="karten.css" />
+  <style>
+    main { max-width: 900px; margin: 0 auto; padding: 20px; text-align: center; }
+    #grid { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; margin-top: 20px; }
+    .slot { display: flex; flex-direction: column; gap: 8px; align-items: center; --card-w: 160px; }
+    .slot .card { cursor: default; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>✏️ Charakterkarten</h1>
+    <p class="hint">Bild hochladen → es landet sofort auf der Karte im Spiel. Fähigkeiten stehen in <code>shared/cards.js</code> → <code>CHARACTERS</code>.</p>
+    <p><a href="./">← zurück zum Spiel</a></p>
+    <div id="grid"></div>
+  </main>
+  <script type="module">
+    import { CHARACTERS } from '/shared/cards.js';
+    import { cardEl } from './card-ui.js';
+    import { fileToAvatar } from '/js/avatar.js';
+
+    const grid = document.getElementById('grid');
+    function render() {
+      grid.innerHTML = '';
+      for (const [key, ch] of Object.entries(CHARACTERS)) {
+        const slot = document.createElement('div');
+        slot.className = 'slot';
+        slot.append(cardEl({ kind: 'special', key, ...ch, art: `/card-art/${key}.jpg?${Date.now()}` }));
+        const label = document.createElement('label');
+        label.className = 'btn-like';
+        label.innerHTML = `📸 Bild für ${ch.name}<input type="file" accept="image/*" hidden />`;
+        label.querySelector('input').onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const image = await fileToAvatar(file);
+          const res = await fetch(`/api/card-art/${key}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image }) });
+          if (!res.ok) alert('Hochladen hat nicht geklappt.');
+          render();
+        };
+        slot.append(label);
+        grid.append(slot);
+      }
+    }
+    render();
+  </script>
+</body>
+</html>
