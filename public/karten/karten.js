@@ -1,6 +1,6 @@
 // „TOPP DAS!“ im Browser: Lobby, Bomben-Karten-Baukasten, Tisch.
 
-import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, describe, validateEffects } from '/shared/cards.js';
+import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, ROLES, CHARACTERS, BASIC_SPECIALS, describe, validateEffects } from '/shared/cards.js';
 import { fileToAvatar } from '/js/avatar.js';
 import { cardEl } from './card-ui.js';
 import { connect, SERVER } from '/js/net.js';
@@ -112,6 +112,11 @@ let me = null, view = null, arts = {};
 let selected = new Set();
 let focus = 0;
 
+// Feste Spieler-ID: überlebt Neuladen, Sperrbildschirm und Funkloch
+const pid = localStorage.getItem('karten-pid') || (crypto.randomUUID?.() ?? String(Math.random()).slice(2));
+localStorage.setItem('karten-pid', pid);
+let lastJoin = null;
+
 function join(roomName) {
   const name = $('name').value.trim();
   if (!name) { $('error').textContent = 'Erst deinen Namen eingeben (oben).'; $('name').focus(); return; }
@@ -119,12 +124,11 @@ function join(roomName) {
   const art = drawn ? draw.toDataURL('image/jpeg', 0.75) : null;
   const specialName = $('special-name').value.trim();
   localStorage.setItem('karten-profile', JSON.stringify({ name, avatar, art, specialName, effects }));
-  socket.emit('join', {
-    name, avatar, room: roomName,
-    special: { name: specialName || `${name}s Bombe`, art, effects },
-  }, (res) => {
+  lastJoin = { pid, name, avatar, room: roomName, special: { name: specialName || `${name}s Bombe`, art, effects } };
+  socket.emit('join', lastJoin, (res) => {
     if (res.error) { $('error').textContent = res.error; return; }
     me = res.id;
+    lastJoin.room = res.room;
     clearInterval(tablePoll);
     history.replaceState(null, '', `?raum=${res.room}`);
     $('lobby').hidden = true;
@@ -170,8 +174,16 @@ socket.on('view', (v) => {
   focus = Math.min(focus, Math.max(0, v.hand.length - 1));
   render();
   if (!myTurnBefore && v.turn === me && v.state === 'playing') navigator.vibrate?.(60);
+  if (v.state === 'playing' && v.game !== seenGame && v.drawn) { seenGame = v.game; $('ranking').hidden = true; playIntro(v); }
+  if (v.state === 'over' && v.ranking && shownRanking !== v.game) { shownRanking = v.game; showRanking(v); }
 });
-socket.on('disconnect', () => toast('Verbindung weg – Seite neu laden.'));
+let seenGame = 0, shownRanking = 0;
+socket.on('disconnect', () => { if (me) toast('📵 Verbindung weg – verbinde neu …'); });
+// Nach einem Abbruch automatisch zurück an denselben Platz
+socket.io.on('reconnect', () => {
+  if (!lastJoin || !me) return;
+  socket.emit('join', lastJoin, (res) => { if (res.ok) toast('✅ Wieder da!'); else toast(res.error); });
+});
 
 // ── Tisch zeichnen ───────────────────────────────────────
 function render() {
@@ -192,7 +204,8 @@ function render() {
     else seat.querySelector('.face').textContent = p.name.slice(0, 2).toUpperCase();
     seat.querySelector('.nm').textContent = p.name + (p.id === v.host ? ' 👑' : '');
     if (p.inGame) seat.querySelector('.nm').dataset.count = p.count;
-    seat.querySelector('.role').textContent = p.role ? `${p.role.emoji} ${p.role.name}` : (v.state === 'lobby' ? 'wartet …' : 'schaut zu');
+    seat.querySelector('.role').textContent = p.role ? `${p.role.emoji} ${p.role.name}` : p.secret ? '❓ geheim' : (v.state === 'lobby' ? 'wartet …' : 'schaut zu');
+    if (!p.connected) seat.querySelector('.role').textContent = '📵 weg …';
     if (p.inGame) {
       const backs = seat.querySelector('.backs');
       const n = Math.min(p.count, 7);
@@ -234,18 +247,19 @@ function render() {
   const myTurn = v.turn === me && v.state === 'playing';
   $('hand').innerHTML = '';
   const n = v.hand.length;
-  const spread = Math.min(80, n * 7);                       // Gesamtwinkel des Fächers
-  const step = n > 1 ? spread / (n - 1) : 0;
-  const cw = parseFloat(getComputedStyle($('pov')).getPropertyValue('--cw')) || 104;
-  const radius = cw <= 80 ? 170 : 240;
-  const half = Math.sin((spread / 2) * Math.PI / 180) * (radius + cw * 1.4) + cw / 2;
+  // Flacher Bogen über die verfügbare Breite: so viel Abstand wie möglich, max. 85 % Kartenbreite
+  const cw = parseFloat(getComputedStyle($('table')).getPropertyValue('--cw')) || 124;
+  const avail = Math.min($('table').clientWidth - 70, 1200);
+  const stepX = n > 1 ? Math.min(cw * 0.85, (avail - cw) / (n - 1)) : 0;
+  const half = ((n - 1) * stepX + cw) / 2;
   $('pov').style.setProperty('--fan-half', `${Math.max(half, cw)}px`);
   $('pov').classList.toggle('my-turn', myTurn);
   v.hand.forEach((c, i) => {
     const el = cardEl(c, arts);
-    const angle = -spread / 2 + i * step;
-    const lift = selected.has(c.id) ? 34 : 0;
-    el.style.transform = `rotate(${angle}deg) translateY(${-lift}px)`;
+    const t = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;   // -1 (links) … 1 (rechts)
+    el.style.setProperty('--x', `${(i - (n - 1) / 2) * stepX}px`);
+    el.style.setProperty('--y', `${t * t * 22}px`);
+    el.style.setProperty('--r', `${t * 9}deg`);
     el.style.zIndex = i;
     if (selected.has(c.id)) el.classList.add('selected');
     if (myTurn && i === focus && usingPad) el.classList.add('focus');
@@ -254,6 +268,17 @@ function render() {
     $('hand').append(el);
   });
   $('turn-banner').classList.toggle('show', myTurn);
+
+  // Erklärfeld: angetippte Special-Karte → was draufsteht und was sie macht
+  const sel = selectedCards();
+  const sp = sel.length === 1 && sel[0].kind === 'special' ? sel[0] : null;
+  $('explain').hidden = !sp;
+  if (sp) {
+    $('explain').innerHTML = '<b></b><span></span><small></small>';
+    $('explain').querySelector('b').textContent = `${sp.emoji ?? ''} ${sp.name}${sp.title ? ' · ' + sp.title : ''}`;
+    $('explain').querySelector('span').textContent = describe(sp.effects);
+    $('explain').querySelector('small').textContent = myTurn ? 'Passt auf jede Karte → „Legen“ drücken.' : 'Passt auf jede Karte – leg sie, wenn du dran bist.';
+  }
 
   // Knöpfe
   const isHost = v.host === me;
@@ -339,4 +364,120 @@ function initControls() {
     }
     requestAnimationFrame(poll);
   })();
+}
+
+// ═════════ Intro: Rolle drehen → Erklärung → Special-Karte auslosen ═════════
+
+let introTimers = [];
+function playIntro(v) {
+  const myRole = v.players.find((p) => p.id === me)?.role;
+  if (!myRole) return;
+  introTimers.forEach(clearTimeout); introTimers = [];
+  const ov = $('intro');
+  ov.hidden = false;
+  ov.innerHTML = `
+    <div class="intro-step" id="step-role">
+      <h2>Deine Rolle</h2>
+      <div class="reel-window"><div class="reel" id="role-reel"></div></div>
+    </div>`;
+  // Slot-Walze: viele zufällige Rollen, ganz unten deine
+  const keys = Object.keys(ROLES);
+  const items = Array.from({ length: 28 }, () => keys[Math.floor(Math.random() * keys.length)]);
+  items.push(myRole.key);
+  const reel = $('role-reel');
+  for (const k of items) {
+    const d = document.createElement('div'); d.className = 'reel-item';
+    d.textContent = `${ROLES[k].emoji} ${ROLES[k].name}`; reel.append(d);
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    reel.style.transform = `translateY(${-(items.length - 1) * 72}px)`;
+  }));
+  introTimers.push(setTimeout(() => { navigator.vibrate?.(80); showRoleCard(myRole, v); }, 2600));
+}
+
+function showRoleCard(role, v) {
+  const ov = $('intro');
+  ov.innerHTML = `
+    <div class="intro-window">
+      <div class="big-emoji"></div>
+      <h2></h2>
+      <p class="role-text"></p>
+      <ul>
+        <li>🎯 <b>Ziel:</b> Als Erste*r alle Karten loswerden.</li>
+        <li>⬆️ Leg <b>gleich hoch oder höher</b> als die oberste Karte – mehrere Gleiche gehen zusammen.</li>
+        <li>🗑️ Kannst du nicht? Dann <b>nimmst du den Stapel</b>.</li>
+        <li>🏁 Sobald jemand keine Karten mehr hat, ist Schluss. Abgerechnet wird nach Kartenzahl – wer am meisten hat, ist Letzte*r.</li>
+        <li>🤫 Deine Rolle ist <b>geheim</b>. Die anderen sehen sie erst am Ende.</li>
+      </ul>
+      <button class="skip" id="skip-role">Weiter ▶</button>
+    </div>`;
+  ov.querySelector('.big-emoji').textContent = role.emoji;
+  ov.querySelector('h2').textContent = role.name;
+  ov.querySelector('.role-text').textContent = role.text;
+  $('skip-role').onclick = () => drawSpecial(v);
+  introTimers.push(setTimeout(() => { if (!$('intro').hidden && $('skip-role')) drawSpecial(v); }, 9000));
+}
+
+function drawSpecial(v) {
+  introTimers.forEach(clearTimeout); introTimers = [];
+  const ov = $('intro');
+  ov.innerHTML = `
+    <div class="intro-step">
+      <h2>Deine Special-Karte</h2>
+      <div class="case-window"><div class="case-marker"></div><div class="case-strip" id="case-strip"></div></div>
+      <div id="drawn-explain" class="explain-big"></div>
+      <button class="skip" id="skip-intro" hidden>Los geht's ▶</button>
+    </div>`;
+  // Kisten-Öffnen: Streifen voller möglicher Specials rauscht vorbei und stoppt bei deiner
+  const pool = [
+    ...Object.entries(CHARACTERS).map(([key, c]) => ({ kind: 'special', key, ...c })),
+    ...Object.entries(BASIC_SPECIALS).map(([key, c]) => ({ kind: 'special', key, ...c })),
+  ];
+  const strip = $('case-strip');
+  const target = 30;
+  const cw = 110, gap = 12;
+  for (let i = 0; i < target + 4; i++) {
+    const c = i === target ? v.drawn : pool[Math.floor(Math.random() * pool.length)];
+    const el = cardEl({ ...c, id: 'i' + i }, arts);
+    el.style.setProperty('--card-w', cw + 'px');
+    if (i === target) el.classList.add('target');
+    strip.append(el);
+  }
+  const winW = strip.parentElement.clientWidth;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    strip.style.transform = `translateX(${winW / 2 - (target * (cw + gap) + cw / 2) + (Math.random() * 40 - 20)}px)`;
+  }));
+  introTimers.push(setTimeout(() => {
+    navigator.vibrate?.([60, 40, 120]);
+    strip.querySelector('.target')?.classList.add('won');
+    const ex = $('drawn-explain');
+    ex.innerHTML = '<b></b><span></span>';
+    ex.querySelector('b').textContent = `${v.drawn.emoji ?? ''} ${v.drawn.name}${v.drawn.title ? ' · ' + v.drawn.title : ''}${v.drawn.by ? ' (gebaut von ' + v.drawn.by + ')' : ''}`;
+    ex.querySelector('span').textContent = describe(v.drawn.effects) + ' – passt auf jede Karte.';
+    $('skip-intro').hidden = false;
+    $('skip-intro').onclick = closeIntro;
+    introTimers.push(setTimeout(closeIntro, 6000));
+  }, 3300));
+}
+function closeIntro() { introTimers.forEach(clearTimeout); introTimers = []; $('intro').hidden = true; }
+
+// ═════════ Abrechnung am Spielende ═════════
+function showRanking(v) {
+  closeIntro();
+  const box = $('ranking');
+  box.hidden = false;
+  box.innerHTML = '<div class="intro-window"><h2>🏁 Abrechnung</h2><ol class="rank"></ol><p class="hint"></p><button class="skip" id="close-ranking">Zum Tisch</button></div>';
+  const medals = ['🥇', '🥈', '🥉'];
+  v.ranking.forEach((r, i) => {
+    const li = document.createElement('li');
+    if (r.id === me) li.classList.add('me');
+    const last = i === v.ranking.length - 1 && v.ranking.length > 1;
+    li.innerHTML = '<span class="pos"></span><span class="who"></span><span class="cnt"></span>';
+    li.querySelector('.pos').textContent = i === 0 ? '🏆' : last ? '💩' : medals[i] ?? `${i + 1}.`;
+    li.querySelector('.who').textContent = `${r.name}${r.role ? ' · ' + r.role.emoji + ' ' + r.role.name : ''}`;
+    li.querySelector('.cnt').textContent = i === 0 ? 'keine Karten!' : `${r.count} Karten`;
+    box.querySelector('.rank').append(li);
+  });
+  box.querySelector('.hint').textContent = v.host === me ? 'Du bist Host – starte die nächste Runde unten.' : 'Der Host startet gleich die nächste Runde.';
+  $('close-ranking').onclick = () => { box.hidden = true; };
 }

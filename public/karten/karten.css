@@ -82,20 +82,22 @@ input, select { background: #2b2a45; color: #fff; }
 
 /* Unten: deine Hände mit dem Kartenfächer */
 #pov { position: absolute; z-index: 4; left: 50%; bottom: 0; width: 0; height: 0; }
-#hand { position: absolute; left: 0; bottom: calc(var(--ch) * 0.12); z-index: 2; }
+#hand { position: absolute; left: 0; bottom: 14px; z-index: 2; }
+/* Flacher Bogen: x/y/Drehung kommen aus dem JS, Anheben + Vergrößern aus CSS */
 #hand .card { position: absolute; left: calc(var(--cw) / -2); bottom: 0; --card-w: var(--cw);
-  transform-origin: 50% calc(100% + 240px); transition: transform .18s, filter .18s; }
-#hand .card:hover { filter: brightness(1.08); }
-#hand .card.selected { box-shadow: 0 0 0 4px var(--accent), 0 0 24px var(--accent); }
+  transform-origin: 50% 100%; transition: transform .16s ease-out, filter .16s;
+  transform: translate(var(--x, 0), calc(var(--y, 0) - var(--lift, 0px))) rotate(var(--r, 0deg)) scale(var(--s, 1)); }
+@media (hover: hover) { #hand .card:hover { --lift: 70px; --s: 1.45; --r: 0deg; z-index: 100 !important; filter: brightness(1.05); } }
+#hand .card.selected { --lift: 46px; --s: 1.2; box-shadow: 0 0 0 4px var(--accent), 0 0 24px var(--accent); }
 #hand .card.dim { filter: brightness(.55) saturate(.7); }
 #hand .card.focus { outline: 3px dashed #fff; outline-offset: 3px; }
 .arm, .thumb { position: absolute; pointer-events: none; filter: drop-shadow(0 8px 10px rgba(0,0,0,.45)); }
-.arm { width: 300px; height: 300px; z-index: 1; bottom: calc(var(--ch) * 0.12 - 130px); }
-.arm.left { left: calc(var(--fan-half, 160px) * -1 - 190px); }
-.arm.right { left: calc(var(--fan-half, 160px) - 110px); transform: scaleX(-1); }
-.thumb { width: 92px; height: 92px; z-index: 3; bottom: calc(var(--ch) * 0.12 + 4px); }
-.thumb.left { left: calc(var(--fan-half, 160px) * -1 - 26px); }
-.thumb.right { left: calc(var(--fan-half, 160px) - 66px); transform: scaleX(-1); }
+.arm { width: 300px; height: 300px; z-index: 1; bottom: -150px; }
+.arm.left { left: calc(var(--fan-half, 160px) * -1 - 230px); }
+.arm.right { left: calc(var(--fan-half, 160px) - 70px); transform: scaleX(-1); }
+.thumb { width: 92px; height: 92px; z-index: 3; bottom: -14px; }
+.thumb.left { left: calc(var(--fan-half, 160px) * -1 - 64px); }
+.thumb.right { left: calc(var(--fan-half, 160px) - 28px); transform: scaleX(-1); }
 .sleeve { fill: var(--accent); stroke: #0005; stroke-width: 4; }
 .cuff { fill: #fff; stroke: #1a1930; stroke-width: 5; }
 .glove { fill: #fff; stroke: #1a1930; stroke-width: 6; stroke-linejoin: round; }
@@ -129,14 +131,14 @@ input, select { background: #2b2a45; color: #fff; }
 .card .label i { display: block; font-style: normal; opacity: .85; font-size: .78em; line-height: 1.15; }
 
 @media (max-width: 700px), (max-height: 560px) {
-  #table { --cw: 74px; }
-  #hand .card { transform-origin: 50% calc(100% + 170px); }
+  #table { --cw: 84px; }
   .arm { width: 220px; height: 220px; bottom: -100px; }
   .arm.left { left: calc(var(--fan-half, 120px) * -1 - 140px); }
   .arm.right { left: calc(var(--fan-half, 120px) - 80px); }
   .thumb { width: 66px; height: 66px; }
-  .thumb.left { left: calc(var(--fan-half, 120px) * -1 - 18px); }
-  .thumb.right { left: calc(var(--fan-half, 120px) - 48px); }
+  .thumb.left { left: calc(var(--fan-half, 120px) * -1 - 46px); }
+  .thumb.right { left: calc(var(--fan-half, 120px) - 20px); }
+  .thumb { bottom: -18px; }
   #log { top: auto; bottom: calc(var(--ch) + 70px); left: 8px; width: 46vw; max-height: 16vh; font-size: .7rem; }
   #actions { top: auto; bottom: calc(var(--ch) + 70px); right: 8px; }
   #actions button { padding: 10px 12px; font-size: .95rem; }
@@ -166,7 +168,6 @@ input, select { background: #2b2a45; color: #fff; }
 /* Handy quer: wenig Höhe → alles kompakter, Knöpfe rechts mittig */
 @media (max-height: 560px) and (orientation: landscape) {
   #table { --cw: 64px; }
-  #hand .card { transform-origin: 50% calc(100% + 150px); }
   #players { height: 30%; }
   .seat { flex-direction: row; gap: 6px; }
   .seat .face { width: 34px; height: 34px; font-size: .8rem; border-width: 2px; }
@@ -181,3 +182,50 @@ input, select { background: #2b2a45; color: #fff; }
   #turn-banner { bottom: auto; top: 26%; font-size: .9rem; }
   .arm { width: 190px; height: 190px; }
 }
+
+/* Vollbild-Karten: das Design der Spieler*innen füllt die ganze Karte */
+.card.special.full { border-width: 2px; }
+.card.full .art { position: absolute; inset: 0; font-size: 0; }
+.card.full .label { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,.85) 35%); padding-top: 18%; }
+
+/* Handy hochkant: Karte antippen = groß anschauen */
+@media (max-width: 700px) { #hand .card.selected { --lift: 70px; --s: 1.4; --r: 0deg; z-index: 100 !important; } }
+@media (max-height: 560px) and (orientation: landscape) { #hand .card.selected { --lift: 40px; --s: 1.5; --r: 0deg; z-index: 100 !important; } }
+
+/* ═════════ Erklärfeld für Specials (unten links) ═════════ */
+#explain { position: absolute; z-index: 6; left: 14px; bottom: calc(var(--ch) + 40px); width: min(300px, 70vw);
+  background: #120f20ee; border: 2px solid #ffd23d; border-radius: 14px; padding: 12px 14px; box-shadow: 0 10px 30px #000a;
+  display: flex; flex-direction: column; gap: 4px; animation: pop .18s ease-out; }
+#explain b { font-size: 1.05rem; } #explain span { font-weight: 600; } #explain small { opacity: .7; }
+@media (max-width: 700px) { #explain { bottom: calc(var(--ch) * 1.7 + 150px); left: 10px; right: 10px; width: auto; } }
+@media (max-height: 560px) and (orientation: landscape) { #explain { bottom: auto; top: 30%; width: 230px; font-size: .85rem; } }
+@keyframes pop { from { transform: scale(.9); opacity: 0; } }
+
+/* ═════════ Overlays: Intro + Abrechnung ═════════ */
+.overlay { position: fixed; inset: 0; z-index: 50; background: radial-gradient(circle at 50% 40%, #2a2448f2, #08070ff7);
+  display: grid; place-items: center; padding: 16px; text-align: center; }
+.intro-step { display: flex; flex-direction: column; align-items: center; gap: 18px; width: 100%; }
+.intro-step h2, .intro-window h2 { margin: 0; font-size: clamp(1.4rem, 5vw, 2.2rem); color: #ffd23d; letter-spacing: .04em; }
+.reel-window { height: 72px; width: min(360px, 90vw); overflow: hidden; border-radius: 16px; background: #1a1930;
+  border: 3px solid #ffd23d; box-shadow: 0 0 40px #ffd23d55, inset 0 12px 16px -8px #000, inset 0 -12px 16px -8px #000; }
+.reel { transition: transform 2.4s cubic-bezier(.12, .75, .1, 1); }
+.reel-item { height: 72px; display: grid; place-items: center; font-size: 1.7rem; font-weight: 900; }
+.intro-window { background: #1a1930; border: 3px solid #ffd23d; border-radius: 22px; padding: 22px; width: min(460px, 94vw);
+  box-shadow: 0 20px 60px #000c, 0 0 50px #ffd23d33; animation: pop .25s ease-out; max-height: 92vh; overflow-y: auto; }
+.intro-window .big-emoji { font-size: 4.5rem; line-height: 1; }
+.intro-window .role-text { font-size: 1.15rem; font-weight: 700; margin: 8px 0 14px; }
+.intro-window ul { text-align: left; padding-left: 0; list-style: none; display: grid; gap: 8px; margin: 0 0 18px; font-size: .95rem; }
+.skip { background: #22c55e; color: #fff; font-size: 1.15rem; padding: 14px 28px; border-radius: 14px; box-shadow: 0 6px 0 #15803d; }
+.skip:active { transform: translateY(3px); box-shadow: 0 3px 0 #15803d; }
+.case-window { position: relative; width: min(760px, 96vw); height: 176px; overflow: hidden; border-radius: 16px; background: #120f20;
+  border: 3px solid #ffd23d; box-shadow: inset 30px 0 30px -20px #000, inset -30px 0 30px -20px #000; }
+.case-strip { display: flex; gap: 12px; padding: 12px 0; transition: transform 3.1s cubic-bezier(.08, .7, .1, 1); }
+.case-strip .card { cursor: default; flex: 0 0 auto; }
+.case-strip .card.won { box-shadow: 0 0 0 4px #ffd23d, 0 0 40px #ffd23d; transform: scale(1.04); transition: .3s; }
+.case-marker { position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #ffd23d; z-index: 2; box-shadow: 0 0 12px #ffd23d; }
+.explain-big { min-height: 3.2em; display: flex; flex-direction: column; gap: 4px; font-size: 1.05rem; }
+.explain-big b { font-size: 1.2rem; }
+.rank { list-style: none; padding: 0; margin: 14px 0; display: grid; gap: 8px; text-align: left; }
+.rank li { display: flex; align-items: center; gap: 10px; background: #120f20; border-radius: 12px; padding: 10px 12px; }
+.rank li.me { outline: 2px solid var(--accent); }
+.rank .pos { font-size: 1.5rem; width: 2rem; text-align: center; } .rank .who { flex: 1; font-weight: 700; } .rank .cnt { opacity: .8; }

@@ -76,30 +76,29 @@ io.on('connection', (socket) => {
 const cardRooms = new Map();
 app.get('/api/karten/tables', (req, res) => {
   res.json([...cardRooms.values()].map((r) => ({
-    id: r.id, state: r.state, players: r.players.map((p) => p.name), max: CARD_RULES.maxPlayers,
+    id: r.id, state: r.state, players: r.players.filter((p) => p.connected).map((p) => p.name), max: CARD_RULES.maxPlayers,
   })));
 });
 const cards = io.of('/karten');
 
 cards.on('connection', (socket) => {
   let room = null;
-  const sync = () => {
-    if (!room) return;
-    for (const p of room.players) cards.to(p.id).emit('view', room.view(p.id));
-  };
+  let pid = null;   // feste Spieler-ID aus dem Browser (überlebt Sperrbildschirm & Funkloch)
+  const sync = () => syncRoom(room);
   const act = (fn) => (data, ack = () => {}) => {
-    if (!room) return ack({ error: 'Nicht im Raum.' });
+    if (!room) return ack({ error: 'Nicht am Tisch.' });
     const res = fn(data);
     ack(res);
     if (res.ok) sync();
   };
 
   socket.on('join', (data = {}, ack = () => {}) => {
-    if (room) return ack({ error: 'Schon in einem Raum.' });
+    if (room) return ack({ error: 'Schon an einem Tisch.' });
     const roomId = String(data.room || 'tisch').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20) || 'tisch';
     const img = (v) => (typeof v === 'string' && v.startsWith('data:image/') && v.length < MAX_AVATAR ? v : null);
+    pid = String(data.pid || socket.id).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 40) || socket.id;
     const r = cardRooms.get(roomId) ?? new CardRoom(roomId);
-    const res = r.addPlayer(socket.id, {
+    const res = r.addPlayer(pid, {
       name: String(data.name || 'Anonym').trim().slice(0, 16) || 'Anonym',
       avatar: img(data.avatar),
       special: { name: data.special?.name, art: img(data.special?.art), effects: data.special?.effects },
@@ -107,24 +106,39 @@ cards.on('connection', (socket) => {
     if (res.error) return ack(res);
     cardRooms.set(roomId, r);
     room = r;
-    ack({ ok: true, id: socket.id, room: roomId });
-    cards.to(roomId).emit('arts', room.arts());
+    r.players.find((p) => p.id === pid).socket = socket.id;
     socket.join(roomId);
-    socket.emit('arts', room.arts());
+    ack({ ok: true, id: pid, room: roomId, rejoined: !!res.rejoined });
+    cards.to(roomId).emit('arts', room.arts());
     sync();
   });
 
-  socket.on('start', act(() => room.start(socket.id)));
-  socket.on('play', act((ids) => room.play(socket.id, ids)));
-  socket.on('take', act(() => room.take(socket.id)));
+  socket.on('start', act(() => room.start(pid)));
+  socket.on('play', act((ids) => room.play(pid, ids)));
+  socket.on('take', act(() => room.take(pid)));
 
   socket.on('disconnect', () => {
     if (!room) return;
-    room.removePlayer(socket.id);
+    const p = room.players.find((o) => o.id === pid);
+    if (p?.socket !== socket.id) return;          // schon mit neuer Verbindung zurück
+    room.disconnect(pid);
     if (!room.players.length) cardRooms.delete(room.id);
     else { cards.to(room.id).emit('arts', room.arts()); sync(); }
   });
 });
+
+function syncRoom(room) {
+  if (!room) return;
+  for (const p of room.players) if (p.connected && p.socket) cards.to(p.socket).emit('view', room.view(p.id));
+}
+
+// Jede Sekunde: Abwesende überspringen/rausnehmen, leere Tische aufräumen
+setInterval(() => {
+  for (const r of cardRooms.values()) {
+    if (r.tick()) syncRoom(r);
+    if (!r.players.some((p) => p.connected)) cardRooms.delete(r.id);
+  }
+}, 1000);
 
 // Spiel-Schleife: alle Räume updaten und den Zustand verschicken
 const dt = 1 / GAME.tickRate;

@@ -13,7 +13,9 @@ export const RULES = {
   colors: ['#ff3d7f', '#3dc6ff', '#ffd23d', '#5cff8a'],
   equalAllowed: true,    // darf man die gleiche Zahl legen?
   maxPlayers: 8,
-  basicSpecialsPerDeck: { reset: 2, burn: 2, lower: 2, reverse: 2, skip: 2 },
+  introSeconds: 6,       // so lange laufen Rollen- und Karten-Animation am Anfang
+  awaySkipSeconds: 15,   // wer die Verbindung verliert und dran ist, wird danach übersprungen
+  awayKickSeconds: 120,  // … und nach so langer Abwesenheit ganz rausgenommen
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -51,32 +53,35 @@ export const EFFECTS = {
 };
 export const MAX_EFFECTS_PER_CARD = 2;
 
-// Die Standard-Specials im Deck
+// Standard-Specials – liegen zusammen mit allen anderen Specials im Los-Topf (1 pro Person)
 export const BASIC_SPECIALS = {
   reset:   { name: 'Reset',  emoji: '🔄', effects: [{ type: 'reset' }] },
   burn:    { name: 'Feuer',  emoji: '🔥', effects: [{ type: 'burn' }, { type: 'again' }] },
   lower:   { name: 'Unter',  emoji: '⬇️', effects: [{ type: 'lower' }] },
   reverse: { name: 'Wende',  emoji: '🔁', effects: [{ type: 'reverse' }] },
   skip:    { name: 'Stopp',  emoji: '⏭️', effects: [{ type: 'skip', n: 1 }] },
+  // Von Spieler*innen gestaltet (Bild in public/karten/art/) – fullArt = Bild füllt die ganze Karte
+  joker:   { name: 'Joker',  emoji: '🃏', effects: [{ type: 'again' }], art: '/karten/art/joker.jpg', fullArt: true },
 };
 
 // ─────────────────────────────────────────────────────────────
 // CHARAKTERKARTEN – jede gibt es einmal im Deck.
 // ⚠️ Die Fähigkeiten sind PLATZHALTER. Jede Person denkt sich ihre selbst aus!
-// Bild: im Browser unter /karten/editor.html hochladen.
+// Bild: fertige Karten-Designs nach public/karten/art/<key>.jpg + art/fullArt eintragen,
+// oder schnell im Browser unter /karten/editor.html hochladen.
 // ─────────────────────────────────────────────────────────────
 export const CHARACTERS = {
   adrian: { name: 'Adrian', title: 'Der Chef',         emoji: '👔',
             effects: [{ type: 'reset' }, { type: 'again' }] },
   aylen:  { name: 'Aylen',  title: 'Die Tauschbörse',  emoji: '💱',
             effects: [{ type: 'swap', target: 'fewest' }] },
-  louis:  { name: 'Louis',  title: 'Der Weihnachtsmann', emoji: '🎁',
+  louis:  { name: 'Louis',  title: 'Der Dreizack',   emoji: '🔱', art: '/karten/art/louis.jpg', fullArt: true,
             effects: [{ type: 'give', n: 3, target: 'next' }] },
   bernd:  { name: 'Bernd',  title: 'Der Lieferdienst', emoji: '🚚',
             effects: [{ type: 'takePile', target: 'next' }] },
   niclas: { name: 'Niclas', title: 'Der Turbo',        emoji: '🏎️',
             effects: [{ type: 'skip', n: 2 }] },
-  andre:  { name: 'Andre',  title: 'Der Bumerang',     emoji: '🪃',
+  andre:  { name: 'Andre',  title: 'Die Himmelskriegerin', emoji: '⚔️', art: '/karten/art/andre.jpg', fullArt: true,
             effects: [{ type: 'reverse' }, { type: 'draw', n: 1, target: 'all' }] },
   ruben:  { name: 'Ruben',  title: 'Das Feuerwerk',    emoji: '🎆',
             effects: [{ type: 'burn' }, { type: 'give', n: 1, target: 'random' }] },
@@ -85,15 +90,15 @@ export const CHARACTERS = {
 // ─────────────────────────────────────────────────────────────
 // ROLLEN – zu Spielbeginn zufällig verteilt, für alle sichtbar.
 // cards: wie viele Karten mehr (+) oder weniger (−) als normal
-// bonus: Extra-Specials auf die Hand (zählen mit) · weight: wie häufig (höher = öfter)
+// weight: wie häufig (höher = öfter) · Die Rolle sieht nur man selbst – bis zum Spielende
 // ─────────────────────────────────────────────────────────────
 export const ROLES = {
-  dorfdepp:  { name: 'Dorfdepp',    emoji: '🤪', cards: +2, bonus: [],         weight: 3, text: 'Startet mit 2 Karten mehr' },
-  pechvogel: { name: 'Pechvogel',   emoji: '🐦‍⬛', cards: +1, bonus: [],         weight: 4, text: 'Startet mit 1 Karte mehr' },
-  buerger:   { name: 'Bürger*in',   emoji: '🧑', cards: 0,  bonus: [],         weight: 5, text: 'Ganz normal. Langweilig, aber sicher.' },
-  held:      { name: 'Held*in',     emoji: '🦸', cards: 0,  bonus: ['reset'],  weight: 3, text: 'Eine Reset-Karte als Rettung' },
-  junggott:  { name: 'Junger Gott', emoji: '⚡', cards: -1, bonus: ['burn'],   weight: 2, text: '1 Karte weniger + eine Feuer-Karte' },
-  gott:      { name: 'Gott',        emoji: '☀️', cards: -2, bonus: [],         weight: 1, text: 'Startet mit 2 Karten weniger' },
+  dorfdepp:  { name: 'Dorfdepp',    emoji: '🤪', cards: +2, weight: 3, text: 'Du startest mit 2 Karten mehr. Viel Glück.' },
+  pechvogel: { name: 'Pechvogel',   emoji: '🐦‍⬛', cards: +1, weight: 4, text: 'Du startest mit 1 Karte mehr.' },
+  buerger:   { name: 'Bürger*in',   emoji: '🧑', cards: 0,  weight: 5, text: 'Ganz normal. Langweilig, aber sicher.' },
+  held:      { name: 'Held*in',     emoji: '🦸', cards: -1, weight: 3, text: 'Du startest mit 1 Karte weniger.' },
+  junggott:  { name: 'Junger Gott', emoji: '⚡', cards: -2, weight: 2, text: 'Du startest mit 2 Karten weniger.' },
+  gott:      { name: 'Gott',        emoji: '☀️', cards: -3, weight: 1, text: 'Du startest mit 3 Karten weniger. Göttlich.' },
 };
 
 export function describe(effects) {
