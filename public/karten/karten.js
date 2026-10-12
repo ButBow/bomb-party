@@ -162,6 +162,9 @@ async function loadTables() {
 }
 const tablePoll = setInterval(loadTables, 3000);
 loadTables();
+// Nach automatischem Neuladen (neue Version) direkt wieder an den Tisch
+const autojoin = sessionStorage.getItem('karten-autojoin');
+if (autojoin) { sessionStorage.removeItem('karten-autojoin'); setTimeout(() => join(autojoin), 400); }
 // Direktlink ?raum=xyz → Feld vorausfüllen
 if ($('room').value) $('join').textContent = `➡️ ${$('room').value} beitreten`;
 
@@ -179,11 +182,35 @@ socket.on('view', (v) => {
 });
 let seenGame = 0, shownRanking = 0;
 socket.on('disconnect', () => { if (me) toast('📵 Verbindung weg – verbinde neu …'); });
-// Nach einem Abbruch automatisch zurück an denselben Platz
-socket.io.on('reconnect', () => {
+// Nach jedem (Wieder-)Verbinden automatisch zurück an denselben Platz
+socket.on('connect', () => {
   if (!lastJoin || !me) return;
-  socket.emit('join', lastJoin, (res) => { if (res.ok) toast('✅ Wieder da!'); else toast(res.error); });
+  socket.emit('join', lastJoin, (res) => { if (res.ok) toast('✅ Wieder da!'); });
 });
+// Neue Server-Version? Seite neu laden und automatisch wieder an den Tisch
+let knownBuild = null;
+socket.on('hello', ({ build }) => {
+  if (knownBuild && build !== knownBuild) {
+    if (lastJoin) sessionStorage.setItem('karten-autojoin', lastJoin.room);
+    location.reload();
+    return;
+  }
+  knownBuild = build;
+});
+
+// Aktion senden – war der Server „vergesslich“ (Neustart), erst wieder hinsetzen, dann nochmal
+function act(event, data, onError = toast) {
+  socket.emit(event, data, (res) => {
+    if (res.rejoin && lastJoin) {
+      return socket.emit('join', lastJoin, (j) => {
+        if (!j.ok) return onError(j.error);
+        socket.emit(event, data, (again) => again.error && onError(again.error));
+      });
+    }
+    if (res.error) onError(res.error);
+    else if (event === 'play') selected.clear();
+  });
+}
 
 // ── Tisch zeichnen ───────────────────────────────────────
 function render() {
@@ -316,9 +343,9 @@ function toggle(c) {
 
 function playSelected() {
   if (!selected.size) return;
-  socket.emit('play', [...selected], (res) => { if (res.error) toast(res.error); else selected.clear(); });
+  act('play', [...selected]);
 }
-const take = () => socket.emit('take', null, (res) => res.error && toast(res.error));
+const take = () => act('take', null);
 
 let toastTimer;
 function toast(text) {
@@ -333,7 +360,7 @@ let usingPad = false;
 function initControls() {
   $('play').onclick = playSelected;
   $('take').onclick = take;
-  $('start').onclick = () => socket.emit('start', null, (res) => res.error && toast(res.error));
+  $('start').onclick = () => act('start', null);
 
   addEventListener('keydown', (e) => {
     if (!view || e.target.tagName === 'INPUT') return;

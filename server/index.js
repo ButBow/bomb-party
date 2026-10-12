@@ -74,6 +74,7 @@ io.on('connection', (socket) => {
 
 // ── Kartenspiel „TOPP DAS!“ (eigener Kanal /karten) ──────────
 const cardRooms = new Map();
+const BUILD = Date.now().toString(36);   // ändert sich bei jedem Server-Start → alte Seiten laden neu
 app.get('/api/karten/tables', (req, res) => {
   res.json([...cardRooms.values()].map((r) => ({
     id: r.id, state: r.state, players: r.players.filter((p) => p.connected).map((p) => p.name), max: CARD_RULES.maxPlayers,
@@ -82,11 +83,12 @@ app.get('/api/karten/tables', (req, res) => {
 const cards = io.of('/karten');
 
 cards.on('connection', (socket) => {
+  socket.emit('hello', { build: BUILD });
   let room = null;
   let pid = null;   // feste Spieler-ID aus dem Browser (überlebt Sperrbildschirm & Funkloch)
   const sync = () => syncRoom(room);
   const act = (fn) => (data, ack = () => {}) => {
-    if (!room) return ack({ error: 'Nicht am Tisch.' });
+    if (!room) return ack({ error: 'Nicht am Tisch.', rejoin: true });   // Browser setzt sich dann selbst wieder hin
     const res = fn(data);
     ack(res);
     if (res.ok) sync();
