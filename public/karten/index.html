@@ -45,31 +45,59 @@
     </section>
 
     <section class="step">
-      <h2>3 · Los</h2>
-      <input id="room" maxlength="20" placeholder="Raum (leer = tisch)" />
-      <button id="join" class="primary">An den Tisch</button>
+      <h2>3 · Tisch wählen</h2>
+      <div id="tables"><p class="hint">Suche offene Tische …</p></div>
+      <div class="new-table">
+        <input id="room" maxlength="20" placeholder="Name für neuen Tisch" />
+        <button id="join" class="primary">➕ Neuer Tisch</button>
+      </div>
       <p id="error"></p>
       <p class="hint"><a href="editor.html">✏️ Charakterkarten-Bilder hochladen</a> · <a href="/">💣 Bomb Party</a></p>
     </section>
   </main>
 
-  <!-- ── Der Tisch ── -->
+  <!-- ── Der Tisch (Ego-Perspektive) ── -->
   <section id="table" hidden>
-    <header id="players"></header>
-    <div id="middle">
-      <div id="pile-area">
-        <div id="pile"></div>
-        <div id="pile-info"></div>
-      </div>
-      <ol id="log"></ol>
+    <div id="felt-wrap"><div id="felt"></div></div>
+    <div id="players"></div>
+    <div id="center">
+      <div id="pile"></div>
+      <div id="pile-info"></div>
+      <div id="ticker"></div>
     </div>
+    <ol id="log"></ol>
     <div id="actions">
       <button id="start" class="primary" hidden>▶️ Spiel starten</button>
       <button id="take">🗑️ Stapel nehmen</button>
-      <button id="play" class="primary">Legen</button>
+      <button id="play" class="primary">Legen ⬆️</button>
     </div>
+    <div id="pov">
+      <!-- Arme + Handflächen liegen HINTER den Karten … -->
+      <svg class="arm left" viewBox="0 0 300 300" aria-hidden="true">
+        <path class="sleeve" d="M-40 330 L-40 210 L150 120 L210 205 L60 330 Z" />
+        <path class="cuff" d="M128 128 L168 108 L222 188 L186 214 Z" />
+        <ellipse class="glove" cx="205" cy="128" rx="58" ry="52" />
+        <path class="glove" d="M220 80 q30 -20 52 -4 q12 14 -8 26 l-30 14 z" />
+      </svg>
+      <svg class="arm right" viewBox="0 0 300 300" aria-hidden="true">
+        <path class="sleeve" d="M-40 330 L-40 210 L150 120 L210 205 L60 330 Z" />
+        <path class="cuff" d="M128 128 L168 108 L222 188 L186 214 Z" />
+        <ellipse class="glove" cx="205" cy="128" rx="58" ry="52" />
+        <path class="glove" d="M220 80 q30 -20 52 -4 q12 14 -8 26 l-30 14 z" />
+      </svg>
+      <div id="hand"></div>
+      <!-- … nur die Daumen liegen DRÜBER, wie beim echten Halten -->
+      <svg class="thumb left" viewBox="0 0 120 120" aria-hidden="true">
+        <path class="glove" d="M18 104 C 8 80, 30 50, 62 26 C 78 14, 100 22, 96 40 C 92 54, 70 66, 56 90 C 46 108, 26 116, 18 104 Z" />
+        <path class="crease" d="M58 46 q10 6 18 2" />
+      </svg>
+      <svg class="thumb right" viewBox="0 0 120 120" aria-hidden="true">
+        <path class="glove" d="M18 104 C 8 80, 30 50, 62 26 C 78 14, 100 22, 96 40 C 92 54, 70 66, 56 90 C 46 108, 26 116, 18 104 Z" />
+        <path class="crease" d="M58 46 q10 6 18 2" />
+      </svg>
+    </div>
+    <div id="turn-banner">DU BIST DRAN</div>
     <div id="toast"></div>
-    <div id="hand"></div>
   </section>
 
   <script type="module" src="karten.js"></script>

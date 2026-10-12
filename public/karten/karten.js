@@ -3,7 +3,7 @@
 import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, describe, validateEffects } from '/shared/cards.js';
 import { fileToAvatar } from '/js/avatar.js';
 import { cardEl } from './card-ui.js';
-import { connect } from '/js/net.js';
+import { connect, SERVER } from '/js/net.js';
 
 const $ = (id) => document.getElementById(id);
 const saved = JSON.parse(localStorage.getItem('karten-profile') || '{}');
@@ -112,24 +112,54 @@ let me = null, view = null, arts = {};
 let selected = new Set();
 let focus = 0;
 
-$('join').onclick = () => {
-  const name = $('name').value.trim() || 'Anonym';
+function join(roomName) {
+  const name = $('name').value.trim();
+  if (!name) { $('error').textContent = 'Erst deinen Namen eingeben (oben).'; $('name').focus(); return; }
   if (!effects.length) { $('error').textContent = 'Deine Karte braucht einen Effekt.'; return; }
   const art = drawn ? draw.toDataURL('image/jpeg', 0.75) : null;
   const specialName = $('special-name').value.trim();
   localStorage.setItem('karten-profile', JSON.stringify({ name, avatar, art, specialName, effects }));
   socket.emit('join', {
-    name, avatar, room: $('room').value.trim(),
+    name, avatar, room: roomName,
     special: { name: specialName || `${name}s Bombe`, art, effects },
   }, (res) => {
     if (res.error) { $('error').textContent = res.error; return; }
     me = res.id;
-    if (res.room !== 'tisch') history.replaceState(null, '', `?raum=${res.room}`);
+    clearInterval(tablePoll);
+    history.replaceState(null, '', `?raum=${res.room}`);
     $('lobby').hidden = true;
     $('table').hidden = false;
     initControls();
   });
-};
+}
+$('join').onclick = () => join($('room').value.trim() || `tisch-${Math.floor(Math.random() * 900 + 100)}`);
+
+// Offene Tische anzeigen (alle 3 Sekunden aktualisiert)
+async function loadTables() {
+  try {
+    const list = await (await fetch(SERVER + '/api/karten/tables')).json();
+    const box = $('tables');
+    box.innerHTML = '';
+    if (!list.length) box.innerHTML = '<p class="hint">Noch kein Tisch offen – eröffne einen! 👇</p>';
+    for (const t of list) {
+      const full = t.players.length >= t.max;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tbl' + (full ? ' full' : '');
+      b.innerHTML = '<span class="ic"></span><span class="tx"><b></b><small></small></span><span class="go"></span>';
+      b.querySelector('.ic').textContent = t.state === 'playing' ? '🔥' : '🃏';
+      b.querySelector('b').textContent = `${t.id} · ${t.players.length}/${t.max}`;
+      b.querySelector('small').textContent = (t.state === 'playing' ? 'läuft – du steigst nächste Runde ein · ' : 'wartet auf Start · ') + t.players.join(', ');
+      b.querySelector('.go').textContent = full ? 'voll' : 'Beitreten';
+      b.onclick = () => join(t.id);
+      box.append(b);
+    }
+  } catch { $('tables').innerHTML = '<p class="hint">Server wacht gerade auf … ⏳</p>'; }
+}
+const tablePoll = setInterval(loadTables, 3000);
+loadTables();
+// Direktlink ?raum=xyz → Feld vorausfüllen
+if ($('room').value) $('join').textContent = `➡️ ${$('room').value} beitreten`;
 
 socket.on('arts', (a) => { arts = a; if (view) render(); });
 socket.on('view', (v) => {
@@ -139,29 +169,47 @@ socket.on('view', (v) => {
   selected = new Set([...selected].filter((id) => ids.has(id)));
   focus = Math.min(focus, Math.max(0, v.hand.length - 1));
   render();
-  if (!myTurnBefore && v.turn === me && v.state === 'playing') { toast('Du bist dran!'); navigator.vibrate?.(60); }
+  if (!myTurnBefore && v.turn === me && v.state === 'playing') navigator.vibrate?.(60);
 });
 socket.on('disconnect', () => toast('Verbindung weg – Seite neu laden.'));
 
 // ── Tisch zeichnen ───────────────────────────────────────
 function render() {
   const v = view;
-  // Spieler*innen
+  // Gegenüber am Tisch: alle anderen im Halbkreis, in Spielreihenfolge ab dir
   $('players').innerHTML = '';
-  for (const p of v.players) {
-    const el = document.createElement('div');
-    el.className = 'pl' + (p.id === v.turn ? ' turn' : '') + (p.inGame || v.state === 'lobby' ? '' : ' out');
+  const meIdx = Math.max(0, v.players.findIndex((p) => p.id === me));
+  const others = [...v.players.slice(meIdx + 1), ...v.players.slice(0, meIdx)];
+  others.forEach((p, i) => {
+    const t = others.length === 1 ? 0.5 : i / (others.length - 1);
+    const seat = document.createElement('div');
+    seat.className = 'seat' + (p.id === v.turn ? ' turn' : '') + (p.inGame || v.state === 'lobby' ? '' : ' out');
+    seat.style.left = `${12 + t * 76}%`;
+    seat.style.top = `${10 + Math.sin(Math.PI * t) * -6 + 6}%`;
     const face = arts[p.id]?.avatar;
-    el.innerHTML = face ? `<img alt="">` : `<div class="face"></div>`;
-    if (face) el.querySelector('img').src = face; else el.querySelector('.face').textContent = p.name.slice(0, 2).toUpperCase();
-    const info = document.createElement('div');
-    info.innerHTML = '<b></b><small></small>';
-    info.querySelector('b').textContent = p.name + (p.id === me ? ' (du)' : '') + (p.id === v.host ? ' 👑' : '');
-    info.querySelector('small').textContent = p.role ? `${p.role.emoji} ${p.role.name}` : (v.state === 'lobby' ? 'wartet …' : 'schaut zu');
-    el.append(info);
-    if (p.inGame) { const c = document.createElement('span'); c.className = 'count'; c.textContent = `🂠${p.count}`; el.append(c); }
-    $('players').append(el);
-  }
+    seat.innerHTML = '<div class="face"></div><div class="nm"></div><div class="role"></div><div class="backs"></div>';
+    if (face) seat.querySelector('.face').style.backgroundImage = `url("${face}")`;
+    else seat.querySelector('.face').textContent = p.name.slice(0, 2).toUpperCase();
+    seat.querySelector('.nm').textContent = p.name + (p.id === v.host ? ' 👑' : '');
+    if (p.inGame) seat.querySelector('.nm').dataset.count = p.count;
+    seat.querySelector('.role').textContent = p.role ? `${p.role.emoji} ${p.role.name}` : (v.state === 'lobby' ? 'wartet …' : 'schaut zu');
+    if (p.inGame) {
+      const backs = seat.querySelector('.backs');
+      const n = Math.min(p.count, 7);
+      for (let k = 0; k < n; k++) {
+        const m = document.createElement('div');
+        m.className = 'mini back-pattern';
+        m.style.transform = `rotate(${(k - (n - 1) / 2) * 9}deg)`;
+        backs.append(m);
+      }
+      const b = document.createElement('b'); b.textContent = p.count; backs.append(b);
+    } else seat.querySelector('.backs').remove();
+    $('players').append(seat);
+  });
+
+  // Deine Rolle + Host-Hinweis an den Ärmeln
+  const mine = v.players.find((p) => p.id === me);
+  $('pov').title = mine?.role ? `${mine.role.emoji} ${mine.role.name}: ${mine.role.text}` : '';
 
   // Stapel
   $('pile').innerHTML = '';
@@ -172,25 +220,40 @@ function render() {
     $('pile').append(el);
   });
   const dirArrow = v.dir === 1 ? '↻' : '↺';
+  $('pile').querySelectorAll('.card').forEach((el) => { el.style.cursor = 'default'; });
   $('pile-info').textContent = v.state === 'playing'
     ? (v.top ? `Zu toppen: ${v.lower ? '≤' : '≥'} ${v.top}` : 'Alles geht!') + `  ·  ${v.pileCount} im Stapel  ·  ${dirArrow}`
     : v.state === 'over' ? 'Runde vorbei' : `${v.players.length} am Tisch`;
 
-  // Log
+  // Log (+ Ticker mit der letzten Aktion fürs Handy)
+  $('ticker').textContent = v.log[v.log.length - 1] ?? '';
   $('log').innerHTML = '';
   for (const l of v.log) { const li = document.createElement('li'); li.textContent = l; $('log').append(li); }
 
-  // Hand
+  // Hand: Fächer zwischen deinen Händen
   const myTurn = v.turn === me && v.state === 'playing';
   $('hand').innerHTML = '';
+  const n = v.hand.length;
+  const spread = Math.min(80, n * 7);                       // Gesamtwinkel des Fächers
+  const step = n > 1 ? spread / (n - 1) : 0;
+  const cw = parseFloat(getComputedStyle($('pov')).getPropertyValue('--cw')) || 104;
+  const radius = cw <= 80 ? 170 : 240;
+  const half = Math.sin((spread / 2) * Math.PI / 180) * (radius + cw * 1.4) + cw / 2;
+  $('pov').style.setProperty('--fan-half', `${Math.max(half, cw)}px`);
+  $('pov').classList.toggle('my-turn', myTurn);
   v.hand.forEach((c, i) => {
     const el = cardEl(c, arts);
+    const angle = -spread / 2 + i * step;
+    const lift = selected.has(c.id) ? 34 : 0;
+    el.style.transform = `rotate(${angle}deg) translateY(${-lift}px)`;
+    el.style.zIndex = i;
     if (selected.has(c.id)) el.classList.add('selected');
     if (myTurn && i === focus && usingPad) el.classList.add('focus');
     if (myTurn && !playable([c])) el.classList.add('dim');
     el.onclick = () => { focus = i; toggle(c); };
     $('hand').append(el);
   });
+  $('turn-banner').classList.toggle('show', myTurn);
 
   // Knöpfe
   const isHost = v.host === me;

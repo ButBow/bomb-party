@@ -8,7 +8,7 @@ import { Server } from 'socket.io';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Room } from './game.js';
 import { CardRoom } from './cards/game.js';
-import { CHARACTERS } from '../shared/cards.js';
+import { CHARACTERS, RULES as CARD_RULES } from '../shared/cards.js';
 import { GAME, BRAND } from '../shared/config.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -74,6 +74,11 @@ io.on('connection', (socket) => {
 
 // ── Kartenspiel „TOPP DAS!“ (eigener Kanal /karten) ──────────
 const cardRooms = new Map();
+app.get('/api/karten/tables', (req, res) => {
+  res.json([...cardRooms.values()].map((r) => ({
+    id: r.id, state: r.state, players: r.players.map((p) => p.name), max: CARD_RULES.maxPlayers,
+  })));
+});
 const cards = io.of('/karten');
 
 cards.on('connection', (socket) => {

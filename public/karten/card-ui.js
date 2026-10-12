@@ -9,8 +9,8 @@ export function cardEl(c, arts = {}) {
   el.dataset.id = c.id;
 
   if (c.kind === 'number') {
-    el.style.background = c.color;
-    el.innerHTML = `<span class="corner">${c.value}</span><span class="v">${c.value}</span>`;
+    el.style.setProperty('--c', c.color);
+    el.innerHTML = `<span class="corner tl">${c.value}</span><span class="v">${c.value}</span><span class="corner br">${c.value}</span>`;
     return el;
   }
 
