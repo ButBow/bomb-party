@@ -23,6 +23,7 @@
     import { CHARACTERS } from '/shared/cards.js';
     import { cardEl } from './card-ui.js';
     import { fileToAvatar } from '/js/avatar.js';
+    import { SERVER } from '/js/net.js';
 
     const grid = document.getElementById('grid');
     function render() {
@@ -38,7 +39,7 @@
           const file = e.target.files[0];
           if (!file) return;
           const image = await fileToAvatar(file);
-          const res = await fetch(`/api/card-art/${key}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image }) });
+          const res = await fetch(`${SERVER}/api/card-art/${key}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image }) });
           if (!res.ok) alert('Hochladen hat nicht geklappt.');
           render();
         };

@@ -4,6 +4,7 @@ import { BRAND } from '/shared/config.js';
 import { initInput, readInput } from './input.js';
 import { fileToAvatar, avatarImage } from './avatar.js';
 import { resize, draw } from './render.js';
+import { connect } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -67,7 +68,7 @@ $('play').onclick = () => {
 };
 
 // ── Netzwerk ─────────────────────────────────────────────
-const socket = io();
+const socket = connect();
 let me = null;
 let state = null;
 let faces = {};

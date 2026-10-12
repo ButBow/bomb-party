@@ -3,6 +3,7 @@
 import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, describe, validateEffects } from '/shared/cards.js';
 import { fileToAvatar } from '/js/avatar.js';
 import { cardEl } from './card-ui.js';
+import { connect } from '/js/net.js';
 
 const $ = (id) => document.getElementById(id);
 const saved = JSON.parse(localStorage.getItem('karten-profile') || '{}');
@@ -106,7 +107,7 @@ function select(options, value, onChange) {
 function range(a, b) { return Array.from({ length: b - a + 1 }, (_, i) => a + i); }
 
 // ── 3 · Beitreten ────────────────────────────────────────
-const socket = io('/karten');
+const socket = connect('/karten');
 let me = null, view = null, arts = {};
 let selected = new Set();
 let focus = 0;

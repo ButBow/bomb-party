@@ -1,0 +1,6 @@
+{
+  "framework": null,
+  "installCommand": "true",
+  "buildCommand": "rm -rf dist && mkdir dist && cp -r public/. dist/ && cp -r shared dist/shared",
+  "outputDirectory": "dist"
+}

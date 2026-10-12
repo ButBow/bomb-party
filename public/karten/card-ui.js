@@ -1,6 +1,7 @@
 // Baut eine Karte als HTML-Element. Wird im Spiel UND im Editor benutzt.
 
 import { describe } from '/shared/cards.js';
+import { SERVER } from '/js/net.js';
 
 export function cardEl(c, arts = {}) {
   const el = document.createElement('div');
@@ -20,7 +21,7 @@ export function cardEl(c, arts = {}) {
   if (isChar) el.classList.add('character');
   const art = document.createElement('div');
   art.className = 'art';
-  const src = isCustom ? arts[c.owner]?.art : c.art;
+  const src = isCustom ? arts[c.owner]?.art : c.art && SERVER + c.art;
   if (src) {
     // Erst prüfen, ob das Bild existiert – sonst bleibt das Emoji stehen
     const probe = new Image();

@@ -13,6 +13,13 @@ import { GAME, BRAND } from '../shared/config.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const app = express();
+// Die Webseite darf auch von Vercel kommen
+app.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Headers', 'content-type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.static(root + 'public'));
 app.use('/shared', express.static(root + 'shared'));
 
@@ -29,7 +36,7 @@ app.post('/api/card-art/:key', express.json({ limit: '2mb' }), (req, res) => {
 });
 
 const http = createServer(app);
-const io = new Server(http, { maxHttpBufferSize: 1_000_000 });
+const io = new Server(http, { maxHttpBufferSize: 1_000_000, cors: { origin: '*' } });
 const rooms = new Map();
 
 const MAX_AVATAR = 200_000; // ~200 KB als Data-URL reicht für 256×256 JPEG locker
