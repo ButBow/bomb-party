@@ -229,3 +229,18 @@ input, select { background: #2b2a45; color: #fff; }
 .rank li { display: flex; align-items: center; gap: 10px; background: #120f20; border-radius: 12px; padding: 10px 12px; }
 .rank li.me { outline: 2px solid var(--accent); }
 .rank .pos { font-size: 1.5rem; width: 2rem; text-align: center; } .rank .who { flex: 1; font-weight: 700; } .rank .cnt { opacity: .8; }
+
+/* ═════════ Auswahlfenster (Person / Farben) ═════════ */
+#picker { z-index: 60; }
+.pick-list { display: grid; gap: 8px; margin: 14px 0; }
+.pick { display: flex; align-items: center; gap: 12px; background: #120f20; padding: 10px 12px; text-align: left; border: 2px solid transparent; }
+.pick:hover { border-color: var(--accent); }
+.pick .pf { width: 42px; height: 42px; border-radius: 50%; background: #3a3760 center/cover; display: grid; place-items: center; font-weight: 900; }
+.pick b { flex: 1; } .pick small { opacity: .7; font-weight: 400; }
+.pick-colors { display: flex; gap: 14px; justify-content: center; margin: 18px 0; }
+.pick-color { width: 64px; height: 64px; border-radius: 50%; padding: 0; border: 4px solid #fff3; }
+.pick-color.on { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 20px #fff8; }
+.cancel { background: #3a3760; }
+.wild-dots { display: inline-flex; gap: 3px; margin-left: 4px; vertical-align: middle; }
+.wild-dots i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 2px solid #fff; }
+#picker { background: #08070ffa; }

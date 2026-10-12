@@ -101,6 +101,45 @@ export const ROLES = {
   gott:      { name: 'Gott',        emoji: '☀️', cards: -3, weight: 1, text: 'Du startest mit 3 Karten weniger. Göttlich.' },
 };
 
+// ─────────────────────────────────────────────────────────────
+// KARTEN VON SPIELER*INNEN mit eigenen Regeln.
+// Die Logik dazu steht in server/cards/game.js (Suche nach „ability“).
+// needs: welche Auswahl man beim Ausspielen trifft – 'target' (eine Person), 'colors2' (zwei Farben)
+// ─────────────────────────────────────────────────────────────
+export const PLAYER_CARDS = {
+  kartoffel: {
+    name: 'Heiße Kartoffel', emoji: '🥔', ability: 'potato', needs: 'target',
+    text: 'Kann nicht abgelegt, nur weitergereicht werden (nie zurück an die Person, von der du sie hast). '
+      + 'Wer sie bekommt, zieht 3. Wer sie hält, ist immun gegen Tausch, zieht aber bei Zieh-Effekten das Dreifache. '
+      + 'Ist sie deine letzte Karte: Du gewinnst, alle anderen ziehen 3.',
+  },
+  zwillinge: {
+    name: 'Zwillings-Parade', title: 'Blick der zwei Welten', emoji: '♊', by: 'NoRevanell Morningstar', ability: 'twins', needs: 'colors2',
+    text: 'Aktiv: Wähle 2 Farben – bis du wieder dran bist, passen sie auf jede Karte. '
+      + 'Sphäre: Solange sie oben liegt, darf man auch 1 drunter legen. '
+      + 'Passiv: Sollst du ziehen, wird sie automatisch abgeworfen – je die Hälfte ziehen deine beiden Sitznachbar*innen.',
+  },
+  gluecklich: {
+    name: 'Glücklicher Schelm', title: 'Wer zuletzt lacht', emoji: '😆', by: 'Luis/Pilzi', ability: 'luckyJester',
+    text: 'Passiv: Spielt jemand gezielt eine Karte gegen dich, fliegt der ganze Effekt automatisch zurück (nicht bei Effekten gegen alle). '
+      + 'Zusammen mit dem Traurigen Schelm legbar: „Lachen und Weinen“.',
+  },
+  traurig: {
+    name: 'Trauriger Schelm', title: 'Geteiltes Leid', emoji: '😢', by: 'Luis/Pilzi', ability: 'sadJester', needs: 'target',
+    text: 'Wähle jemanden: zieht so viele Karten, wie du danach noch auf der Hand hast. '
+      + 'Zusammen mit dem Glücklichen Schelm legbar: „Lachen und Weinen“.',
+  },
+};
+export const JESTER_COMBO = {
+  name: 'Lachen und Weinen',
+  text: 'Beide Schelme zusammen: Person 1 mischt ihre ganze Hand in den Ziehstapel und zieht gleich viele neu. Person 2 zieht 3.',
+};
+
+// Text einer Karte: eigener Text (Spielerkarten) oder automatisch aus den Effekten
+export function cardText(c) {
+  return c.text ?? describe(c.effects ?? []);
+}
+
 export function describe(effects) {
   return effects.map((e) => EFFECTS[e.type]?.text(e) ?? '?').join(' + ');
 }

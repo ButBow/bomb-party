@@ -3,7 +3,7 @@
 // Sperrbildschirm oder Funkloch wieder auf denselben Platz zurück.
 // Jede*r bekommt eine eigene Sicht (view): die eigene Hand ganz, von den anderen nur die Anzahl.
 
-import { RULES, BASIC_SPECIALS, CHARACTERS, ROLES, EFFECTS, describe, validateEffects } from '../../shared/cards.js';
+import { RULES, BASIC_SPECIALS, CHARACTERS, PLAYER_CARDS, JESTER_COMBO, ROLES, EFFECTS, cardText, validateEffects } from '../../shared/cards.js';
 
 let nextCardId = 1;
 const card = (props) => ({ id: nextCardId++, ...props });
@@ -28,6 +28,7 @@ export class CardRoom {
     this.winner = null;
     this.ranking = null;
     this.introUntil = 0;
+    this.wild = null;         // Zwillings-Parade: { colors: [a, b], owner } – diese Farben passen auf alles
   }
 
   // ── Leute ──────────────────────────────────────────────────
@@ -124,6 +125,7 @@ export class CardRoom {
       ...this.players.map((p) => card({ kind: 'special', key: 'custom', owner: p.id, by: p.name, name: p.special.name, emoji: '💣', effects: p.special.effects })),
       ...Object.entries(CHARACTERS).map(([key, ch]) => card({ kind: 'special', key, name: ch.name, title: ch.title, emoji: ch.emoji, effects: ch.effects, art: ch.art ?? `/card-art/${key}.jpg`, fullArt: !!ch.fullArt })),
       ...Object.keys(BASIC_SPECIALS).map(basicCard),
+      ...Object.entries(PLAYER_CARDS).map(([key, c]) => card({ kind: 'special', key, effects: [], ...c })),
     ]);
 
     for (const p of this.players) {
@@ -143,7 +145,10 @@ export class CardRoom {
   }
 
   // ── Züge ───────────────────────────────────────────────────
-  play(id, cardIds) {
+  // payload: entweder [Karten-IDs] oder { ids, choice: { target, targets, colors } }
+  play(id, payload) {
+    const cardIds = Array.isArray(payload) ? payload : payload?.ids;
+    const choice = (!Array.isArray(payload) && payload?.choice) || {};
     const p = this.current();
     if (this.state !== 'playing' || p?.id !== id) return { error: 'Du bist nicht dran.' };
     if (Date.now() < this.introUntil) return { error: 'Kurz warten – die Lose laufen noch 🎰' };
@@ -152,6 +157,19 @@ export class CardRoom {
     if (cards.some((c) => !c) || new Set(cardIds).size !== cardIds.length) return { error: 'Karte nicht auf deiner Hand.' };
     const why = this.whyNot(cards);
     if (why) return { error: why };
+
+    // 🥔 wird weitergereicht, nicht abgelegt
+    if (cards[0].ability === 'potato') return this.passPotato(p, cards[0], choice.target);
+
+    // Auswahl prüfen, BEVOR Karten die Hand verlassen
+    const opp = (tid) => this.active().find((o) => o.id === tid && o !== p);
+    const combo = cards.length === 2 && cards[0].kind === 'special';
+    if (combo && !(opp(choice.targets?.[0]) && opp(choice.targets?.[1]) && choice.targets[0] !== choice.targets[1])) return { error: 'Wähle zwei verschiedene Personen.' };
+    if (!combo && cards[0].ability === 'sadJester' && !opp(choice.target)) return { error: 'Wähle, wer mit dir weinen soll.' };
+    if (cards[0].ability === 'twins') {
+      const cs = choice.colors;
+      if (!Array.isArray(cs) || cs.length !== 2 || cs[0] === cs[1] || !cs.every((c) => RULES.colors.includes(c))) return { error: 'Wähle zwei Farben.' };
+    }
 
     p.hand = p.hand.filter((c) => !cardIds.includes(c.id));
     this.pile.push(...cards);
@@ -163,11 +181,100 @@ export class CardRoom {
       return this.endTurn(p, { skip: 0, again: false });
     }
 
-    const sp = cards[0];
-    this.say(`${p.name} spielt ${sp.emoji} ${sp.name}: ${describe(sp.effects)}`);
     const ctx = { skip: 0, again: false };
-    for (const e of sp.effects) this.runEffect(p, e, ctx);
+    if (combo) {
+      const [a, b2] = choice.targets.map(opp);
+      this.say(`${p.name} spielt 😆😢 ${JESTER_COMBO.name}!`);
+      // Person 1: Hand (ohne Kartoffel) in den Ziehstapel mischen, gleich viele neu ziehen
+      const keep = a.hand.filter((c) => c.ability === 'potato');
+      const old = a.hand.filter((c) => c.ability !== 'potato');
+      this.deck.push(...old); shuffle(this.deck);
+      a.hand = keep;
+      for (let i = 0; i < old.length && this.deck.length; i++) a.hand.push(this.deck.pop());
+      sortHand(a.hand);
+      this.say(`   → ${a.name} mischt die Hand neu (${old.length} Karten)`);
+      this.draw(b2, 3, { from: p });
+      return this.endTurn(p, ctx);
+    }
+
+    const sp = cards[0];
+    // Spielerkarten haben lange Texte → im Protokoll nur der Name (Details per Antippen)
+    this.say(`${p.name} spielt ${sp.emoji} ${sp.name}${sp.text ? '!' : ': ' + cardText(sp)}`);
+    if (sp.ability === 'twins') {
+      this.wild = { colors: choice.colors, owner: p.id };
+      this.say(`   → ♊ Bis ${p.name} wieder dran ist, passen diese 2 Farben auf alles.`);
+    } else if (sp.ability === 'sadJester') {
+      this.draw(opp(choice.target), p.hand.length, { from: p });
+    }
+    for (const e of sp.effects ?? []) this.runEffect(p, e, ctx);
     return this.endTurn(p, ctx);
+  }
+
+  // 🥔 Weiterreichen: Ziel zieht 3 und bekommt die Kartoffel (nie zurück an die Herkunft)
+  passPotato(p, potato, targetId) {
+    const others = this.active().filter((o) => o !== p);
+    const allowed = others.filter((o) => o.id !== potato.cameFrom);
+    const valid = allowed.length ? allowed : others;      // zu zweit geht's notfalls doch zurück
+    const t = valid.find((o) => o.id === targetId);
+    if (!t) return { error: targetId === potato.cameFrom ? 'Nicht zurück an die Person, von der du sie hast!' : 'Wähle, wer die Kartoffel bekommt.' };
+    if (this.reflects(t, p)) {
+      this.say(`😆 ${t.name} lacht zuletzt – die Kartoffel bleibt bei ${p.name}, und ${p.name} zieht 3!`);
+      this.draw(p, 3, { global: true });
+      return this.endTurn(p, { skip: 0, again: false });
+    }
+    p.hand = p.hand.filter((c) => c !== potato);
+    this.say(`🥔 ${p.name} reicht die Heiße Kartoffel an ${t.name} weiter!`);
+    this.draw(t, 3, { from: p, noReflect: true });
+    potato.cameFrom = p.id;
+    t.hand.push(potato);
+    sortHand(t.hand);
+    return this.endTurn(p, { skip: 0, again: false });
+  }
+
+  // Zentrales Ziehen – hier greifen alle Reaktionskarten
+  draw(t, n, { from = null, global = false, noReflect = false } = {}) {
+    if (!t || n <= 0) return;
+    if (from && t !== from && !global) {
+      if (!noReflect && this.reflects(t, from)) {
+        this.say(`😆 ${t.name} lacht zuletzt – ${from.name} zieht ${n} statt ${t.name}!`);
+        return this.draw(from, n, { global: true });
+      }
+      const twins = t.hand.find((c) => c.ability === 'twins');
+      if (twins) {
+        t.hand = t.hand.filter((c) => c !== twins);
+        this.pile.push(twins);
+        const half = Math.ceil(n / 2);
+        const nbs = [this.seatFrom(t, 1), this.seatFrom(t, -1)];
+        this.say(`♊ ${t.name} kontert mit der Zwillings-Parade – ${[...new Set(nbs)].map((x) => x.name).join(' & ')} ziehen je ${half}!`);
+        for (const nb of nbs) this.draw(nb, half, { global: true });
+        return;
+      }
+    }
+    if (t.hand.some((c) => c.ability === 'potato')) {
+      this.say(`🥔 ${t.name} hält die Kartoffel → zieht ${n * 3} statt ${n}!`);
+      n *= 3;
+    }
+    let got = 0;
+    for (; got < n && this.deck.length; got++) t.hand.push(this.deck.pop());
+    sortHand(t.hand);
+    if (got) this.say(`   → ${t.name} zieht ${got}${got < n ? ' (Stapel leer)' : ''}`);
+  }
+
+  // 😆 Glücklicher Schelm: verbraucht sich und wirft einen gezielten Angriff zurück
+  reflects(t, from) {
+    if (!from || t === from) return false;
+    const lucky = t.hand.find((c) => c.ability === 'luckyJester');
+    if (!lucky) return false;
+    t.hand = t.hand.filter((c) => c !== lucky);
+    this.pile.splice(Math.max(0, this.pile.length - 1), 0, lucky);   // unter die oberste Karte
+    return true;
+  }
+
+  seatFrom(p, step) {
+    const n = this.players.length;
+    let i = this.players.indexOf(p);
+    do { i = (i + step * this.dir + n) % n; } while (!this.players[i].inGame);
+    return this.players[i];
   }
 
   take(id) {
@@ -185,10 +292,18 @@ export class CardRoom {
   }
 
   whyNot(cards) {
-    if (cards[0].kind === 'special') return cards.length === 1 ? null : 'Specials nur einzeln.';
-    if (cards.some((c) => c.kind !== 'number' || c.value !== cards[0].value)) return 'Nur gleiche Zahlen zusammen.';
+    if (cards[0].kind === 'special' || cards.some((c) => c.kind === 'special')) {
+      if (cards.length === 1) return null;
+      const ab = cards.map((c) => c.ability).sort().join('+');
+      return ab === 'luckyJester+sadJester' ? null : 'Specials nur einzeln (Ausnahme: beide Schelme).';
+    }
+    if (cards.some((c) => c.value !== cards[0].value)) return 'Nur gleiche Zahlen zusammen.';
     const v = cards[0].value;
     if (this.top === 0) return null;
+    // ♊ freie Farben: passen auf alles
+    if (this.wild && cards.every((c) => this.wild.colors.includes(c.color))) return null;
+    // ♊ Sphäre: liegt die Zwillings-Parade oben, geht auch genau 1 drunter
+    if (this.pile[this.pile.length - 1]?.ability === 'twins' && v === this.top - 1) return null;
     if (this.lower) return v < this.top || (RULES.equalAllowed && v === this.top) ? null : `Muss ${RULES.equalAllowed ? '≤' : '<'} ${this.top} sein.`;
     return v > this.top || (RULES.equalAllowed && v === this.top) ? null : `Muss ${RULES.equalAllowed ? '≥' : '>'} ${this.top} sein.`;
   }
@@ -197,6 +312,17 @@ export class CardRoom {
     // Gewonnen? Wer zuerst keine Karten mehr hat.
     const out = p.hand.length === 0 ? p : this.active().find((o) => o.hand.length === 0);
     if (out) { this.finish(out); return { ok: true }; }
+    // 🥔 Ist die Kartoffel jemandes letzte Karte: Sieg, alle anderen ziehen 3, Kartoffel zurück in den Stapel
+    const potatoWin = this.active().find((o) => o.hand.length === 1 && o.hand[0].ability === 'potato');
+    if (potatoWin) {
+      const potato = potatoWin.hand.pop();
+      delete potato.cameFrom;
+      this.deck.unshift(potato);
+      this.say(`🥔 ${potatoWin.name} hat nur noch die Kartoffel – Sieg! Alle anderen ziehen 3.`);
+      for (const o of this.active()) if (o !== potatoWin) this.draw(o, 3, { global: true });
+      this.finish(potatoWin);
+      return { ok: true };
+    }
     if (!again) this.advance(1 + skip);
     return { ok: true };
   }
@@ -206,6 +332,10 @@ export class CardRoom {
     if (!this.active().length) return;
     for (let s = 0; s < steps; s++) {
       do { this.turn = (this.turn + this.dir + n) % n; } while (!this.players[this.turn].inGame);
+    }
+    if (this.wild && this.current()?.id === this.wild.owner) {
+      this.wild = null;
+      this.say('♊ Die zwei Welten schließen sich wieder.');
     }
   }
 
@@ -223,8 +353,11 @@ export class CardRoom {
 
   // ── Effekte aus dem Baukasten ──────────────────────────────
   runEffect(p, e, ctx) {
+    const global = e.target === 'all';
     const targets = this.resolveTargets(p, e.target);
-    const names = targets.map((t) => t.name).join(', ');
+    const isPotato = (c) => c.ability === 'potato';
+    const tradable = (h) => h.filter((c) => !isPotato(c));
+    if (targets.length && EFFECTS[e.type].targets) this.say(`   → trifft ${targets.map((t) => t.name).join(', ')}`);
     switch (e.type) {
       case 'reset': this.top = 0; this.lower = false; break;
       case 'burn': this.pile = []; this.top = 0; this.lower = false; break;
@@ -233,29 +366,50 @@ export class CardRoom {
       case 'again': ctx.again = true; break;
       case 'boss': this.top = RULES.maxValue + 1; this.lower = false; break;
       case 'skip': ctx.skip += e.n; break;
+      case 'draw':
+        for (const t of targets) this.draw(t, e.n, { from: p, global });
+        break;
       case 'give':
         for (const t of targets) {
-          for (let i = 0; i < e.n && p.hand.length; i++) t.hand.push(...p.hand.splice(randIdx(p.hand), 1));
+          if (!global && this.reflects(t, p)) { this.say(`😆 ${t.name} lacht zuletzt – ${p.name} behält die Karten.`); continue; }
+          for (let i = 0; i < e.n; i++) {
+            const pool = tradable(p.hand);
+            if (!pool.length) break;
+            const c = pool[randIdx(pool)];
+            p.hand = p.hand.filter((x) => x !== c);
+            t.hand.push(c);
+          }
           sortHand(t.hand);
         }
-        break;
-      case 'draw':
-        for (const t of targets) {
-          for (let i = 0; i < e.n && this.deck.length; i++) t.hand.push(this.deck.pop());
-          sortHand(t.hand);
-        }
-        if (!this.deck.length) this.say('(Der Ziehstapel ist leer.)');
         break;
       case 'takePile':
-        for (const t of targets) { t.hand.push(...this.pile); sortHand(t.hand); }
+        for (const t of targets) {
+          const who = !global && this.reflects(t, p) ? p : t;
+          if (who === p) this.say(`😆 ${t.name} lacht zuletzt – ${p.name} nimmt den Stapel selbst!`);
+          who.hand.push(...this.pile); sortHand(who.hand);
+        }
         this.pile = []; this.top = 0; this.lower = false;
         break;
       case 'swap':
-        for (const t of targets) { [p.hand, t.hand] = [t.hand, p.hand]; }
+        for (const t of targets) {
+          if (t.hand.some(isPotato)) { this.say(`🥔 ${t.name} hält die Kartoffel – immun gegen Tausch!`); continue; }
+          if (!global && this.reflects(t, p)) { this.say(`😆 ${t.name} lacht zuletzt – kein Tausch.`); continue; }
+          const keepP = p.hand.filter(isPotato);
+          const mine = tradable(p.hand);
+          p.hand = [...keepP, ...t.hand];
+          t.hand = mine;
+          sortHand(p.hand); sortHand(t.hand);
+        }
         break;
       case 'rotate': {
         const act = this.active();
-        const passed = act.map((pl) => (pl.hand.length ? pl.hand.splice(randIdx(pl.hand), 1)[0] : null));
+        const passed = act.map((pl) => {
+          const pool = tradable(pl.hand);
+          if (!pool.length) return null;
+          const c = pool[randIdx(pool)];
+          pl.hand = pl.hand.filter((x) => x !== c);
+          return c;
+        });
         act.forEach((pl, i) => {
           const c = passed[(i - this.dir + act.length) % act.length];
           if (c) { pl.hand.push(c); sortHand(pl.hand); }
@@ -263,7 +417,6 @@ export class CardRoom {
         break;
       }
     }
-    if (names && EFFECTS[e.type].targets) this.say(`   → trifft ${names}`);
   }
 
   resolveTargets(p, target) {
@@ -305,6 +458,8 @@ export class CardRoom {
       winner: this.winner,
       ranking: this.ranking,
       top: this.top, lower: this.lower, dir: this.dir,
+      wild: this.wild?.colors ?? null,
+      sphere: this.pile[this.pile.length - 1]?.ability === 'twins',
       deckCount: this.deck.length,
       pile: this.pile.slice(-4),
       pileCount: this.pile.length,

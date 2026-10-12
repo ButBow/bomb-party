@@ -115,3 +115,141 @@ test('Niemand bekommt die eigene selbst gebaute Karte', () => {
     for (const p of r.players) assert.notEqual(p.drawn.owner, p.id);
   }
 });
+
+// ── Spielerkarten ────────────────────────────────────────────
+import { PLAYER_CARDS } from '../shared/cards.js';
+const sp = (key) => ({ id: key + Math.random(), kind: 'special', key, effects: [], ...PLAYER_CARDS[key] });
+const drawFx = (n, target = 'next') => ({ id: 'd' + Math.random(), kind: 'special', key: 'x', name: 'Zieh', emoji: '📥', effects: [{ type: 'draw', n, target }] });
+
+test('🥔 Kartoffel kann nicht abgelegt, nur weitergereicht werden – Ziel zieht 3', () => {
+  const r = table(3);
+  for (const o of r.players) o.hand = [num(1)];
+  const p = r.current();
+  const potato = sp('kartoffel');
+  p.hand = [potato, num(3), num(4)];
+  const t = r.players.find((o) => o !== p);
+  const before = t.hand.length;
+  assert.ok(r.play(p.id, { ids: [potato.id], choice: {} }).error);           // ohne Ziel geht nicht
+  assert.equal(r.play(p.id, { ids: [potato.id], choice: { target: t.id } }).ok, true);
+  assert.equal(t.hand.length, before + 3 + 1);
+  assert.equal(r.pile.includes(potato), false);
+  assert.equal(potato.cameFrom, p.id);
+});
+
+test('🥔 Nicht zurück an die Person, von der man sie hat', () => {
+  const r = table(3);
+  const p = r.current();
+  const potato = { ...sp('kartoffel'), cameFrom: r.players.find((o) => o !== p).id };
+  p.hand = [potato, num(3)];
+  assert.match(r.play(p.id, { ids: [potato.id], choice: { target: potato.cameFrom } }).error, /zurück/);
+});
+
+test('🥔 Wer sie hält, zieht dreifach und ist immun gegen Tausch', () => {
+  const r = table(2);
+  for (const o of r.players) o.hand = [num(1)];
+  const p = r.current();
+  const t = r.players.find((o) => o !== p);
+  t.hand = [sp('kartoffel'), num(1)];
+  const c = drawFx(2);
+  p.hand = [c, num(5), num(6)];
+  r.play(p.id, [c.id]);
+  assert.equal(t.hand.length, 2 + 6);
+  r.turn = r.players.indexOf(p);
+  const swap = { id: 's', kind: 'special', key: 'x', name: 'Tausch', emoji: '🃏', effects: [{ type: 'swap', target: 'next' }] };
+  p.hand = [swap, num(5)];
+  const tHand = t.hand.length;
+  r.play(p.id, ['s']);
+  assert.equal(t.hand.length, tHand);
+});
+
+test('🥔 Letzte Karte = Sieg, alle anderen ziehen 3', () => {
+  const r = table(3);
+  for (const o of r.players) o.hand = [num(1), num(2)];
+  const p = r.current();
+  p.hand = [sp('kartoffel'), num(9)];
+  r.top = 0;
+  const others = r.players.filter((o) => o !== p).map((o) => [o, o.hand.length]);
+  r.play(p.id, [p.hand.find((c) => c.kind === 'number').id]);
+  assert.equal(r.state, 'over');
+  assert.equal(r.winner, p.id);
+  for (const [o, n] of others) assert.equal(o.hand.length, n + 3);
+});
+
+test('😆 Glücklicher Schelm wirft Ziehen auf den Angreifer zurück', () => {
+  const r = table(2);
+  for (const o of r.players) o.hand = [num(1)];
+  const p = r.current();
+  const t = r.players.find((o) => o !== p);
+  t.hand = [sp('gluecklich'), num(1)];
+  const c = drawFx(3);
+  p.hand = [c, num(5)];
+  r.play(p.id, [c.id]);
+  assert.equal(t.hand.length, 1);         // Schelm verbraucht, nichts gezogen
+  assert.equal(p.hand.length, 1 + 3);
+});
+
+test('😆 … aber nicht bei Effekten gegen alle', () => {
+  const r = table(3);
+  for (const o of r.players) o.hand = [num(1)];
+  const p = r.current();
+  const t = r.players.find((o) => o !== p);
+  t.hand = [sp('gluecklich'), num(1)];
+  const c = drawFx(2, 'all');
+  p.hand = [c, num(5)];
+  r.play(p.id, [c.id]);
+  assert.equal(t.hand.length, 4);
+});
+
+test('♊ Zwillings-Parade kontert Ziehen: Nachbar*innen ziehen je die Hälfte', () => {
+  const r = table(4);
+  const p = r.current();
+  for (const o of r.players) o.hand = [num(1), num(2)];
+  const t = r.seatFrom(p, 1);
+  t.hand = [sp('zwillinge'), num(1)];
+  const c = drawFx(4);
+  p.hand = [c, num(5)];
+  r.play(p.id, [c.id]);
+  assert.equal(t.hand.length, 1);
+  assert.equal(p.hand.length, 1 + 2);                          // p sitzt neben t
+  assert.equal(r.seatFrom(t, 1).hand.length, 2 + 2);
+});
+
+test('♊ Aktiv: zwei Farben passen auf alles, bis man wieder dran ist', () => {
+  const r = table(2);
+  const p = r.current();
+  const tw = sp('zwillinge');
+  p.hand = [tw, num(5)];
+  r.top = 12;
+  const [c1, c2] = RULES.colors;
+  assert.equal(r.play(p.id, { ids: [tw.id], choice: { colors: [c1, c2] } }).ok, true);
+  const q = r.current();
+  q.hand = [{ ...num(2), color: c1 }, num(3)];
+  assert.equal(r.play(q.id, [q.hand[0].id]).ok, true);   // 2 auf 12, weil freie Farbe
+  assert.equal(r.wild, null);                              // p wieder dran → vorbei
+});
+
+test('😢 Trauriger Schelm: Ziel zieht so viele, wie man danach hält', () => {
+  const r = table(2);
+  for (const o of r.players) o.hand = [num(1)];
+  const p = r.current();
+  const t = r.players.find((o) => o !== p);
+  const sad = sp('traurig');
+  p.hand = [sad, num(1), num(2), num(3), num(4)];
+  const before = t.hand.length;
+  assert.equal(r.play(p.id, { ids: [sad.id], choice: { target: t.id } }).ok, true);
+  assert.equal(t.hand.length, before + 4);
+});
+
+test('😆😢 Lachen und Weinen: beide Schelme zusammen', () => {
+  const r = table(3);
+  const p = r.current();
+  const [a, b] = r.players.filter((o) => o !== p);
+  a.hand = [num(1), num(2), num(3)]; b.hand = [num(4)];
+  const lucky = sp('gluecklich'), sad = sp('traurig');
+  p.hand = [lucky, sad, num(7)];
+  const aCount = a.hand.length, bCount = b.hand.length, aIds = a.hand.map((c) => c.id).join();
+  assert.equal(r.play(p.id, { ids: [lucky.id, sad.id], choice: { targets: [a.id, b.id] } }).ok, true);
+  assert.equal(a.hand.length, aCount);
+  assert.notEqual(a.hand.map((c) => c.id).join(), aIds);
+  assert.equal(b.hand.length, bCount + 3);
+});

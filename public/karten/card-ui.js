@@ -1,6 +1,6 @@
 // Baut eine Karte als HTML-Element. Wird im Spiel UND im Editor benutzt.
 
-import { describe, CHARACTERS } from '/shared/cards.js';
+import { cardText, CHARACTERS } from '/shared/cards.js';
 import { SERVER } from '/js/net.js';
 
 export function cardEl(c, arts = {}) {
@@ -35,7 +35,7 @@ export function cardEl(c, arts = {}) {
   label.className = 'label';
   label.innerHTML = `<b></b><i></i>`;
   label.querySelector('b').textContent = c.title ? `${c.name} · ${c.title}` : c.name;
-  label.querySelector('i').textContent = describe(c.effects);
+  label.querySelector('i').textContent = cardText(c);
   el.append(art, label);
   return el;
 }

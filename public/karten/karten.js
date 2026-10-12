@@ -1,6 +1,6 @@
 // „TOPP DAS!“ im Browser: Lobby, Bomben-Karten-Baukasten, Tisch.
 
-import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, ROLES, CHARACTERS, BASIC_SPECIALS, describe, validateEffects } from '/shared/cards.js';
+import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, ROLES, CHARACTERS, BASIC_SPECIALS, PLAYER_CARDS, JESTER_COMBO, RULES, describe, cardText, validateEffects } from '/shared/cards.js';
 import { fileToAvatar } from '/js/avatar.js';
 import { cardEl } from './card-ui.js';
 import { connect, SERVER } from '/js/net.js';
@@ -262,8 +262,17 @@ function render() {
   const dirArrow = v.dir === 1 ? '↻' : '↺';
   $('pile').querySelectorAll('.card').forEach((el) => { el.style.cursor = 'default'; });
   $('pile-info').textContent = v.state === 'playing'
-    ? (v.top ? `Zu toppen: ${v.lower ? '≤' : '≥'} ${v.top}` : 'Alles geht!') + `  ·  ${v.pileCount} im Stapel  ·  ${dirArrow}`
+    ? (v.top ? `Zu toppen: ${v.lower ? '≤' : '≥'} ${v.top}` : 'Alles geht!') + (v.sphere && v.top ? ` (oder ${v.top - 1})` : '') + `  ·  ${v.pileCount} im Stapel  ·  ${dirArrow}`
     : v.state === 'over' ? 'Runde vorbei' : `${v.players.length} am Tisch`;
+
+  // ♊ freie Farben als Punkte hinter der Stapel-Info
+  if (v.wild && v.state === 'playing') {
+    const dots = document.createElement('span');
+    dots.className = 'wild-dots';
+    dots.title = 'Diese Farben passen gerade auf alles';
+    for (const c of v.wild) { const d = document.createElement('i'); d.style.background = c; dots.append(d); }
+    $('pile-info').append(' ♊', dots);
+  }
 
   // Log (+ Ticker mit der letzten Aktion fürs Handy)
   $('ticker').textContent = v.log[v.log.length - 1] ?? '';
@@ -298,14 +307,18 @@ function render() {
 
   // Erklärfeld: angetippte Special-Karte → was draufsteht und was sie macht
   const sel = selectedCards();
-  const sp = sel.length === 1 && sel[0].kind === 'special' ? sel[0] : null;
+  const isCombo = isJesterCombo(sel);
+  const sp = isCombo ? { emoji: '😆😢', name: JESTER_COMBO.name, text: JESTER_COMBO.text } : sel.length === 1 && sel[0].kind === 'special' ? sel[0] : null;
   $('explain').hidden = !sp;
   if (sp) {
     $('explain').innerHTML = '<b></b><span></span><small></small>';
-    $('explain').querySelector('b').textContent = `${sp.emoji ?? ''} ${sp.name}${sp.title ? ' · ' + sp.title : ''}`;
-    $('explain').querySelector('span').textContent = describe(sp.effects);
-    $('explain').querySelector('small').textContent = myTurn ? 'Passt auf jede Karte → „Legen“ drücken.' : 'Passt auf jede Karte – leg sie, wenn du dran bist.';
+    $('explain').querySelector('b').textContent = `${sp.emoji ?? ''} ${sp.name}${sp.title ? ' · ' + sp.title : ''}${sp.by ? ' (von ' + sp.by + ')' : ''}`;
+    $('explain').querySelector('span').textContent = cardText(sp);
+    $('explain').querySelector('small').textContent = sp.ability === 'potato' ? (myTurn ? '→ „Weitergeben“ drücken und Person wählen.' : 'Weitergeben, wenn du dran bist.')
+      : sp.ability === 'luckyJester' && !isCombo ? 'Wirkt automatisch, solange du sie hältst.'
+      : myTurn ? 'Passt auf jede Karte → „Legen“ drücken.' : 'Passt auf jede Karte – leg sie, wenn du dran bist.';
   }
+  $('play').textContent = sel[0]?.ability === 'potato' ? '🥔 Weitergeben' : 'Legen ⬆️';
 
   // Knöpfe
   const isHost = v.host === me;
@@ -323,10 +336,16 @@ function render() {
 // Gleiche Logik wie auf dem Server – nur damit man im Browser direkt sieht, was geht
 function playable(cards) {
   if (!cards.length) return false;
-  if (cards[0].kind === 'special') return cards.length === 1;
-  if (cards.some((c) => c.kind !== 'number' || c.value !== cards[0].value)) return false;
+  if (cards.some((c) => c.kind === 'special')) return cards.length === 1 || isJesterCombo(cards);
+  if (cards.some((c) => c.value !== cards[0].value)) return false;
   const v = cards[0].value;
-  return !view.top || (view.lower ? v <= view.top : v >= view.top);
+  if (!view.top) return true;
+  if (view.wild && cards.every((c) => view.wild.includes(c.color))) return true;
+  if (view.sphere && v === view.top - 1) return true;
+  return view.lower ? v <= view.top : v >= view.top;
+}
+function isJesterCombo(cards) {
+  return cards.length === 2 && cards.map((c) => c.ability).sort().join('+') === 'luckyJester+sadJester';
 }
 const selectedCards = () => view.hand.filter((c) => selected.has(c.id));
 
@@ -334,16 +353,85 @@ function toggle(c) {
   if (selected.has(c.id)) selected.delete(c.id);
   else {
     // Andere Zahl/Special gewählt? Dann neu anfangen statt mischen.
-    const cur = selectedCards()[0];
-    if (cur && (c.kind === 'special' || cur.kind === 'special' || cur.value !== c.value)) selected.clear();
+    const cur = selectedCards();
+    const jesters = cur.length === 1 && isJesterCombo([cur[0], c]);
+    if (cur[0] && !jesters && (c.kind === 'special' || cur[0].kind === 'special' || cur[0].value !== c.value)) selected.clear();
     selected.add(c.id);
   }
   render();
 }
 
-function playSelected() {
+async function playSelected() {
   if (!selected.size) return;
-  act('play', [...selected]);
+  const cards = selectedCards();
+  const ids = [...selected];
+  const others = view.players.filter((p) => p.inGame && p.id !== me);
+  let choice = {};
+  if (isJesterCombo(cards)) {
+    const a = await pick('😆 Wer mischt die ganze Hand neu?', others);
+    if (!a) return;
+    const b = await pick('😢 Wer zieht 3?', others.filter((p) => p.id !== a));
+    if (!b) return;
+    choice = { targets: [a, b] };
+  } else if (cards[0].ability === 'potato') {
+    let ok = others.filter((p) => p.id !== cards[0].cameFrom);
+    if (!ok.length) ok = others;
+    const t = await pick('🥔 An wen geht die Kartoffel? (zieht 3)', ok);
+    if (!t) return;
+    choice = { target: t };
+  } else if (cards[0].ability === 'sadJester') {
+    const t = await pick('😢 Wer soll mit dir weinen?', others);
+    if (!t) return;
+    choice = { target: t };
+  } else if (cards[0].ability === 'twins') {
+    const cs = await pickColors();
+    if (!cs) return;
+    choice = { colors: cs };
+  }
+  act('play', { ids, choice });
+}
+
+// Auswahlfenster: eine Person wählen
+function pick(title, people) {
+  return new Promise((resolve) => {
+    const ov = $('picker');
+    ov.hidden = false;
+    ov.innerHTML = '<div class="intro-window"><h2></h2><div class="pick-list"></div><button class="cancel">Abbrechen</button></div>';
+    ov.querySelector('h2').textContent = title;
+    for (const p of people) {
+      const b = document.createElement('button');
+      b.className = 'pick';
+      const face = arts[p.id]?.avatar;
+      b.innerHTML = '<span class="pf"></span><b></b><small></small>';
+      if (face) b.querySelector('.pf').style.backgroundImage = `url("${face}")`; else b.querySelector('.pf').textContent = p.name.slice(0, 2).toUpperCase();
+      b.querySelector('b').textContent = p.name;
+      b.querySelector('small').textContent = `${p.count} Karten`;
+      b.onclick = () => { ov.hidden = true; resolve(p.id); };
+      ov.querySelector('.pick-list').append(b);
+    }
+    ov.querySelector('.cancel').onclick = () => { ov.hidden = true; resolve(null); };
+  });
+}
+// Auswahlfenster: zwei Farben wählen
+function pickColors() {
+  return new Promise((resolve) => {
+    const ov = $('picker');
+    const chosen = [];
+    ov.hidden = false;
+    ov.innerHTML = '<div class="intro-window"><h2>♊ Wähle zwei Farben</h2><p class="hint">Bis du wieder dran bist, passen sie auf jede Karte.</p><div class="pick-colors"></div><button class="cancel">Abbrechen</button></div>';
+    for (const c of RULES.colors) {
+      const b = document.createElement('button');
+      b.className = 'pick-color';
+      b.style.background = c;
+      b.onclick = () => {
+        if (chosen.includes(c)) return;
+        chosen.push(c); b.classList.add('on');
+        if (chosen.length === 2) { ov.hidden = true; resolve(chosen); }
+      };
+      ov.querySelector('.pick-colors').append(b);
+    }
+    ov.querySelector('.cancel').onclick = () => { ov.hidden = true; resolve(null); };
+  });
 }
 const take = () => act('take', null);
 
@@ -459,6 +547,7 @@ function drawSpecial(v) {
   const pool = [
     ...Object.entries(CHARACTERS).map(([key, c]) => ({ kind: 'special', key, ...c })),
     ...Object.entries(BASIC_SPECIALS).map(([key, c]) => ({ kind: 'special', key, ...c })),
+    ...Object.entries(PLAYER_CARDS).map(([key, c]) => ({ kind: 'special', key, effects: [], ...c })),
   ];
   const strip = $('case-strip');
   const target = 30;
@@ -480,7 +569,7 @@ function drawSpecial(v) {
     const ex = $('drawn-explain');
     ex.innerHTML = '<b></b><span></span>';
     ex.querySelector('b').textContent = `${v.drawn.emoji ?? ''} ${v.drawn.name}${v.drawn.title ? ' · ' + v.drawn.title : ''}${v.drawn.by ? ' (gebaut von ' + v.drawn.by + ')' : ''}`;
-    ex.querySelector('span').textContent = describe(v.drawn.effects) + ' – passt auf jede Karte.';
+    ex.querySelector('span').textContent = cardText(v.drawn);
     $('skip-intro').hidden = false;
     $('skip-intro').onclick = closeIntro;
     introTimers.push(setTimeout(closeIntro, 6000));
