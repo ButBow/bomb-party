@@ -179,8 +179,10 @@ socket.on('view', (v) => {
   if (!myTurnBefore && v.turn === me && v.state === 'playing') navigator.vibrate?.(60);
   if (v.state === 'playing' && v.game !== seenGame && v.drawn) { seenGame = v.game; $('ranking').hidden = true; playIntro(v); }
   if (v.state === 'over' && v.ranking && shownRanking !== v.game) { shownRanking = v.game; showRanking(v); }
+  showFx(v.fx);
 });
 let seenGame = 0, shownRanking = 0;
+const bubbles = {};
 socket.on('disconnect', () => { if (me) toast('📵 Verbindung weg – verbinde neu …'); });
 // Nach jedem (Wieder-)Verbinden automatisch zurück an denselben Platz
 socket.on('connect', () => {
@@ -222,6 +224,7 @@ function render() {
   others.forEach((p, i) => {
     const t = others.length === 1 ? 0.5 : i / (others.length - 1);
     const seat = document.createElement('div');
+    seat.dataset.id = p.id;
     seat.className = 'seat' + (p.id === v.turn ? ' turn' : '') + (p.inGame || v.state === 'lobby' ? '' : ' out');
     seat.style.left = `${12 + t * 76}%`;
     seat.style.top = `${10 + Math.sin(Math.PI * t) * -6 + 6}%`;
@@ -244,6 +247,13 @@ function render() {
       }
       const b = document.createElement('b'); b.textContent = p.count; backs.append(b);
     } else seat.querySelector('.backs').remove();
+    const bb = bubbles[p.id];
+    if (bb && bb.until > Date.now()) {
+      const b = document.createElement('div');
+      b.className = 'bubble';
+      b.textContent = bb.text;
+      seat.append(b);
+    }
     $('players').append(seat);
   });
 
@@ -596,4 +606,59 @@ function showRanking(v) {
   });
   box.querySelector('.hint').textContent = v.host === me ? 'Du bist Host – starte die nächste Runde unten.' : 'Der Host startet gleich die nächste Runde.';
   $('close-ranking').onclick = () => { box.hidden = true; };
+}
+
+// ═════════ Chat ═════════
+const QUICK = ['😂', '🔥', '💀', '👏', '😭', '🥔', 'GG', 'Beeil dich 😴'];
+let unread = 0;
+for (const q of QUICK) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = q;
+  b.onclick = () => socket.emit('chat', q);
+  document.querySelector('.chat-quick').append(b);
+}
+$('chat-btn').onclick = () => { $('chat').hidden = !$('chat').hidden; if (!$('chat').hidden) { unread = 0; showUnread(); $('chat-input').focus(); scrollChat(); } };
+$('chat-close').onclick = () => { $('chat').hidden = true; };
+$('chat-form').onsubmit = (e) => {
+  e.preventDefault();
+  const t = $('chat-input').value.trim();
+  if (t) socket.emit('chat', t);
+  $('chat-input').value = '';
+};
+socket.on('chat-history', (list) => { $('chat-list').innerHTML = ''; list.forEach((m) => addChat(m, false)); });
+socket.on('chat', (m) => addChat(m, true));
+
+function addChat(m, live) {
+  const li = document.createElement('li');
+  if (m.id === me) li.className = 'mine';
+  li.innerHTML = '<b></b><span></span>';
+  li.querySelector('b').textContent = m.name;
+  li.querySelector('span').textContent = m.text;
+  $('chat-list').append(li);
+  while ($('chat-list').children.length > 60) $('chat-list').firstChild.remove();
+  scrollChat();
+  if (!live) return;
+  if ($('chat').hidden && m.id !== me) { unread++; showUnread(); }
+  bubble(m);
+}
+const scrollChat = () => { $('chat-list').scrollTop = $('chat-list').scrollHeight; };
+function showUnread() { $('chat-unread').hidden = !unread; $('chat-unread').textContent = unread > 9 ? '9+' : unread; }
+// Sprechblase über dem Kopf der Person am Tisch (überlebt das Neuzeichnen bei jedem Zug)
+function bubble(m) {
+  bubbles[m.id] = { text: m.text.length > 60 ? m.text.slice(0, 57) + '…' : m.text, until: Date.now() + 4500 };
+  if (view) render();
+  setTimeout(() => view && render(), 4600);
+}
+
+// ═════════ Großes Effekt-Banner (z. B. Münzwurf) ═════════
+let lastFxId = null;
+function showFx(fx) {
+  if (!fx || fx.id === lastFxId) return;
+  const first = lastFxId === null;
+  lastFxId = fx.id;
+  if (first) return;                 // beim Beitreten nicht alte Banner zeigen
+  const el = $('fx-banner');
+  el.textContent = fx.text;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  navigator.vibrate?.([40, 30, 40]);
 }

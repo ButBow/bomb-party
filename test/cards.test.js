@@ -253,3 +253,43 @@ test('😆😢 Lachen und Weinen: beide Schelme zusammen', () => {
   assert.notEqual(a.hand.map((c) => c.id).join(), aIds);
   assert.equal(b.hand.length, bCount + 3);
 });
+
+test('🎲 Kriege 4 oder verliere 4 – beide Ausgänge', () => {
+  const real = Math.random;
+  try {
+    for (const [roll, delta] of [[0.1, +4 - 1], [0.9, -4 - 1]]) {
+      const r = table(2);
+      for (const o of r.players) o.hand = [num(1)];
+      const p = r.current();
+      const g = sp('gluecksspiel');
+      p.hand = [g, ...[2, 3, 4, 5, 6, 7].map(num)];
+      const before = p.hand.length;
+      Math.random = () => roll;
+      r.play(p.id, [g.id]);
+      Math.random = real;
+      assert.equal(p.hand.length, before + delta);
+      assert.ok(r.lastFx.text.includes(roll < 0.5 ? 'KRIEGE' : 'VERLIERE'));
+    }
+  } finally { Math.random = real; }
+});
+
+test('🎲 Wer dabei alle Karten verliert, gewinnt', () => {
+  const r = table(2);
+  for (const o of r.players) o.hand = [num(1)];
+  const p = r.current();
+  const g = sp('gluecksspiel');
+  p.hand = [g, num(2), num(3)];
+  const real = Math.random; Math.random = () => 0.9;
+  try { r.play(p.id, [g.id]); } finally { Math.random = real; }
+  assert.equal(r.state, 'over');
+  assert.equal(r.winner, p.id);
+});
+
+test('💬 Chat: Text wird gekürzt, Spam gebremst', () => {
+  const r = table(2);
+  const m = r.chatSay('p0', '  hallo   welt  ' + 'x'.repeat(300));
+  assert.equal(m.text.length, 200);
+  assert.ok(m.text.startsWith('hallo welt'));
+  assert.equal(r.chatSay('p0', 'nochmal'), null);
+  assert.equal(r.chatSay('niemand', 'hi'), null);
+});

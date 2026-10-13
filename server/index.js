@@ -111,6 +111,7 @@ cards.on('connection', (socket) => {
     r.players.find((p) => p.id === pid).socket = socket.id;
     socket.join(roomId);
     ack({ ok: true, id: pid, room: roomId, rejoined: !!res.rejoined });
+    socket.emit('chat-history', r.chat ?? []);
     cards.to(roomId).emit('arts', room.arts());
     sync();
   });
@@ -118,6 +119,10 @@ cards.on('connection', (socket) => {
   socket.on('start', act(() => room.start(pid)));
   socket.on('play', act((ids) => room.play(pid, ids)));
   socket.on('take', act(() => room.take(pid)));
+  socket.on('chat', (text) => {
+    const msg = room?.chatSay(pid, text);
+    if (msg) cards.to(room.id).emit('chat', msg);
+  });
 
   socket.on('disconnect', () => {
     if (!room) return;

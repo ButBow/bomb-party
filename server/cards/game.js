@@ -203,6 +203,18 @@ export class CardRoom {
     if (sp.ability === 'twins') {
       this.wild = { colors: choice.colors, owner: p.id };
       this.say(`   → ♊ Bis ${p.name} wieder dran ist, passen diese 2 Farben auf alles.`);
+    } else if (sp.ability === 'gamble') {
+      // 🎲 Münzwurf: 4 ziehen oder 4 loswerden (die Kartoffel bleibt immer auf der Hand)
+      if (Math.random() < 0.5) {
+        this.fx(`🎲 ${p.name}: KRIEGE 4! 😱`);
+        this.draw(p, 4, { global: true });
+      } else {
+        const loose = p.hand.filter((c) => c.ability !== 'potato');
+        const gone = shuffle(loose).slice(0, 4);
+        p.hand = p.hand.filter((c) => !gone.includes(c));
+        this.deck.unshift(...gone);
+        this.fx(`🎲 ${p.name}: VERLIERE ${gone.length}! 🥳`);
+      }
     } else if (sp.ability === 'sadJester') {
       this.draw(opp(choice.target), p.hand.length, { from: p });
     }
@@ -445,6 +457,21 @@ export class CardRoom {
   current() { return this.players[this.turn]; }
   host() { return this.players.find((p) => p.connected) ?? this.players[0]; }
   say(text) { this.log.push(text); this.log = this.log.slice(-8); }
+  // Großes Banner für alle (z. B. Münzwurf-Ergebnis)
+  fx(text) { this.lastFx = { id: (this.lastFx?.id ?? 0) + 1, text }; this.say(text); }
+
+  // ── Chat ──────────────────────────────────────────────────
+  chatSay(pid, text) {
+    const p = this.players.find((o) => o.id === pid);
+    const clean = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (!p || !clean) return null;
+    const now = Date.now();
+    if (now - (p.lastChat || 0) < 700) return null;     // kleine Spam-Bremse
+    p.lastChat = now;
+    const msg = { id: pid, name: p.name, text: clean, t: now };
+    this.chat = [...(this.chat ?? []), msg].slice(-60);
+    return msg;
+  }
 
   view(forId) {
     const me = this.players.find((p) => p.id === forId);
@@ -460,6 +487,7 @@ export class CardRoom {
       top: this.top, lower: this.lower, dir: this.dir,
       wild: this.wild?.colors ?? null,
       sphere: this.pile[this.pile.length - 1]?.ability === 'twins',
+      fx: this.lastFx ?? null,
       deckCount: this.deck.length,
       pile: this.pile.slice(-4),
       pileCount: this.pile.length,

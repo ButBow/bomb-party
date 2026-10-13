@@ -1,0 +1,37 @@
+name: 🃏 Neue Karte einreichen
+description: Deine Idee für eine Special-Karte – ganz ohne Code
+title: "Neue Karte: "
+labels: ["karte"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Mitbauen! Füll das hier aus – wir bauen die Karte ins **Club Bombe Spiel** ein.
+        Tipp: Halte die Fähigkeit kurz. Nichts mit Unendlichkeit, kein Sofort-Verlieren.
+  - type: input
+    id: name
+    attributes:
+      label: Name der Karte
+      placeholder: z. B. Der Ausreden-König
+    validations:
+      required: true
+  - type: input
+    id: by
+    attributes:
+      label: Von wem ist die Karte?
+      placeholder: Dein Name im Club
+    validations:
+      required: true
+  - type: textarea
+    id: effect
+    attributes:
+      label: Was macht die Karte?
+      description: So genau wie möglich. Wann spielt man sie? Wen trifft sie? Was passiert genau?
+      placeholder: "Wähle zwei Personen – sie tauschen ihre Hände. Nur 1× pro Spiel."
+    validations:
+      required: true
+  - type: textarea
+    id: art
+    attributes:
+      label: Bild (optional)
+      description: Bild einfach hier reinziehen (hochkant, am besten 2:3). Nur eigene oder KI-Bilder – keine Fotos von anderen ohne deren Okay.

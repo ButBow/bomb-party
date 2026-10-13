@@ -2,7 +2,7 @@
 // Diese Datei laden Server UND Browser. Hier passt ihr das Spiel an.
 
 export const CARD_BRAND = {
-  title: 'TOPP DAS!',
+  title: 'Club Bombe Spiel',
   tagline: 'Leg höher. Oder friss den Stapel.',
 };
 
@@ -128,6 +128,10 @@ export const PLAYER_CARDS = {
     name: 'Trauriger Schelm', title: 'Geteiltes Leid', emoji: '😢', by: 'Luis/Pilzi', ability: 'sadJester', needs: 'target',
     text: 'Wähle jemanden: zieht so viele Karten, wie du danach noch auf der Hand hast. '
       + 'Zusammen mit dem Glücklichen Schelm legbar: „Lachen und Weinen“.',
+  },
+  gluecksspiel: {
+    name: 'Kriege 4 oder verliere 4', emoji: '🎲', ability: 'gamble',
+    text: 'Münzwurf: Entweder du ziehst 4 Karten – oder du wirst 4 Karten los. 50 : 50.',
   },
 };
 export const JESTER_COMBO = {

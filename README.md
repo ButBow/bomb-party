@@ -1,6 +1,10 @@
-# 💣 BOMB PARTY
+# 🃏 Club Bombe Spiel · 💣 Bomb Party
 
-**Ein Multiplayer-Browserspiel, das wir im Workshop gemeinsam bauen.**
+**Von Wien bis Berlin – ClubApp.** Zwei Multiplayer-Browserspiele, die wir im Workshop gemeinsam bauen.
+
+👉 **Spielen:** https://bomb-party-henna.vercel.app/karten/ · **Mitmachen ohne Code:** [docs/MITMACHEN.md](docs/MITMACHEN.md)
+
+## Bomb Party
 Prinzip: Bomberman. Kisten sprengen, Power-ups sammeln, die anderen erwischen.
 Der Clou: **Du spielst dich selbst.** Foto hochladen, und dein Gesicht ist die Spielfigur.
 
