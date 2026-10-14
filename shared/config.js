@@ -44,6 +44,12 @@ export const POWERUPS = {
   speed: { icon: '👟', label: 'schneller' },
 };
 
+// Lesezeit beim Kartenspiel; mit „Weiter“ kann man früher fortfahren.
+export const CARD_INTRO = {
+  roleReadSeconds: 30,
+  specialReadSeconds: 20,
+};
+
 // Wo läuft der Spielserver? Leer = gleiche Adresse wie die Webseite (lokal, Tunnel).
 // Auf Vercel liegt nur die Webseite – der Server läuft auf Render.
 export const GAME_SERVER_URL = 'https://ballet-warehouse-loading-bubble.trycloudflare.com'; // übergangsweise Laptop-Tunnel → später Render

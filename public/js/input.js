@@ -7,7 +7,7 @@ let bombTap = false; // merkt kurze Drücker, die zwischen zwei Frames passieren
 
 export function initInput() {
   addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.closest('input, #music-controls')) return;
     keys.add(e.code);
     if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) bombTap = true;
     if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();

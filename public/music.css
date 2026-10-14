@@ -1,0 +1,49 @@
+#music-controls {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #ffffff30;
+  border-radius: 18px;
+  background: #1a1930ed;
+  box-shadow: 0 4px 18px #0005;
+  color: #fff;
+  font: 700 13px system-ui, sans-serif;
+}
+#music-controls button {
+  width: auto;
+  min-width: 44px;
+  min-height: 36px;
+  padding: 6px 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+#music-controls button[aria-pressed="true"] { color: #5cff8a; }
+#music-controls button:focus-visible, #music-controls input:focus-visible {
+  outline: 2px solid #ffd23d;
+  outline-offset: 3px;
+}
+#music-controls input {
+  width: 64px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0;
+  accent-color: #ff3d7f;
+}
+body:has(#music-controls) #lobby { padding-top: 76px; }
+/* Die Musik bleibt auch über dem Intro erreichbar; kleine Displays brauchen Platz. */
+@media (max-width: 700px), (max-height: 560px) {
+  #music-controls { gap: 2px; padding: 3px 5px; }
+  #music-controls input { width: 48px; }
+  #intro.overlay { padding-top: 70px; overflow-y: auto; }
+  #intro .intro-step { padding-bottom: 16px; }
+  #intro .intro-window { max-height: calc(100dvh - 90px); }
+}

@@ -4,6 +4,7 @@ import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, ROLES, CHARACTERS, 
 import { fileToAvatar } from '/js/avatar.js';
 import { cardEl } from './card-ui.js';
 import { connect, SERVER } from '/js/net.js';
+import { CARD_INTRO } from '/shared/config.js';
 
 const $ = (id) => document.getElementById(id);
 const saved = JSON.parse(localStorage.getItem('karten-profile') || '{}');
@@ -461,7 +462,7 @@ function initControls() {
   $('start').onclick = () => act('start', null);
 
   addEventListener('keydown', (e) => {
-    if (!view || e.target.tagName === 'INPUT') return;
+    if (!view || e.target.closest('input, select, textarea, #music-controls') || !$('intro').hidden) return;
     const n = view.hand.length;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') { focus = (focus + 1) % n; usingPad = true; }
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') { focus = (focus - 1 + n) % n; usingPad = true; }
@@ -540,7 +541,7 @@ function showRoleCard(role, v) {
   ov.querySelector('h2').textContent = role.name;
   ov.querySelector('.role-text').textContent = role.text;
   $('skip-role').onclick = () => drawSpecial(v);
-  introTimers.push(setTimeout(() => { if (!$('intro').hidden && $('skip-role')) drawSpecial(v); }, 9000));
+  introTimers.push(setTimeout(() => { if (!$('intro').hidden && $('skip-role')) drawSpecial(v); }, CARD_INTRO.roleReadSeconds * 1000));
 }
 
 function drawSpecial(v) {
@@ -582,7 +583,7 @@ function drawSpecial(v) {
     ex.querySelector('span').textContent = cardText(v.drawn);
     $('skip-intro').hidden = false;
     $('skip-intro').onclick = closeIntro;
-    introTimers.push(setTimeout(closeIntro, 6000));
+    introTimers.push(setTimeout(closeIntro, CARD_INTRO.specialReadSeconds * 1000));
   }, 3300));
 }
 function closeIntro() { introTimers.forEach(clearTimeout); introTimers = []; $('intro').hidden = true; }
