@@ -1,12 +1,156 @@
 // „TOPP DAS!“ im Browser: Lobby, Bomben-Karten-Baukasten, Tisch.
 
-import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, ROLES, CHARACTERS, BASIC_SPECIALS, PLAYER_CARDS, JESTER_COMBO, RULES, describe, cardText, validateEffects } from '/shared/cards.js';
+import { CARD_BRAND, EFFECTS, TARGETS, MAX_EFFECTS_PER_CARD, ROLES, CHARACTERS, BASIC_SPECIALS, PLAYER_CARDS, JESTER_COMBO, RULES, describe, cardText, validateEffects, COLOR_ELEMENTS } from '/shared/cards.js';
 import { fileToAvatar } from '/js/avatar.js';
 import { cardEl } from './card-ui.js';
 import { connect, SERVER } from '/js/net.js';
+import { sound } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const saved = JSON.parse(localStorage.getItem('karten-profile') || '{}');
+
+// ── Steuerleiste (BGM, SFX, Vibration, Vollbild, Almanach) ──
+const btnBgm = $('toggle-bgm');
+const btnSfx = $('toggle-sfx');
+const btnVib = $('toggle-vib');
+const btnFs = $('toggle-fullscreen');
+const btnAlmanach = $('open-almanach');
+const modalAlmanach = $('almanach-modal');
+const closeAlmanach = $('almanach-close');
+const almanachContent = $('almanach-content');
+
+function updateAudioUI() {
+  if (btnBgm) {
+    btnBgm.classList.toggle('muted', !sound.bgmEnabled);
+    btnBgm.textContent = sound.bgmEnabled ? '🎵' : '🔇';
+  }
+  if (btnSfx) {
+    btnSfx.classList.toggle('muted', !sound.sfxEnabled);
+    btnSfx.textContent = sound.sfxEnabled ? '🔊' : '🔈';
+  }
+}
+if (btnBgm) btnBgm.onclick = () => { sound.toggleBGM(); updateAudioUI(); };
+if (btnSfx) btnSfx.onclick = () => { sound.toggleSFX(); updateAudioUI(); };
+updateAudioUI();
+
+// ── Vibration / Haptik ────────────────────────────────────
+let vibEnabled = localStorage.getItem('karten-vib') !== 'false';
+function updateVibUI() {
+  if (btnVib) {
+    btnVib.classList.toggle('muted', !vibEnabled);
+    btnVib.textContent = vibEnabled ? '📳' : '📴';
+  }
+}
+export function vibrate(pattern) {
+  if (vibEnabled && typeof navigator !== 'undefined' && navigator.vibrate) {
+    try { navigator.vibrate(pattern); } catch (e) {}
+  }
+}
+if (btnVib) {
+  btnVib.onclick = () => {
+    vibEnabled = !vibEnabled;
+    localStorage.setItem('karten-vib', vibEnabled);
+    updateVibUI();
+    if (vibEnabled) vibrate(40);
+  };
+  updateVibUI();
+}
+
+// ── Vollbildmodus ─────────────────────────────────────────
+function isFullscreen() {
+  return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function updateFsUI() {
+  if (btnFs) btnFs.textContent = isFullscreen() ? '🗗' : '⛶';
+}
+function toggleFullscreen() {
+  if (!isFullscreen()) {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+}
+if (btnFs) btnFs.onclick = toggleFullscreen;
+document.addEventListener('fullscreenchange', updateFsUI);
+document.addEventListener('webkitfullscreenchange', updateFsUI);
+updateFsUI();
+
+// ── Club-Almanach & Galerie ───────────────────────────────
+let activeTab = 'club';
+function renderAlmanachTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.almanach-tabs .tab-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  if (!almanachContent) return;
+  almanachContent.innerHTML = '';
+
+  let items = [];
+  if (tab === 'club') {
+    items = Object.values(PLAYER_CARDS).map((c) => ({
+      emoji: c.emoji || '✨',
+      name: c.name,
+      title: c.title || 'Spezialkarte',
+      by: c.by ? `Urheber: ${c.by}` : '',
+      text: c.text,
+    }));
+  } else if (tab === 'characters') {
+    items = Object.values(CHARACTERS).map((ch) => ({
+      emoji: ch.emoji || '🎭',
+      name: ch.name,
+      title: ch.title || 'Charakter',
+      by: 'Club-Mitglied',
+      text: describe(ch.effects ?? []),
+    }));
+  } else if (tab === 'specials') {
+    items = Object.values(BASIC_SPECIALS).map((s) => ({
+      emoji: s.emoji || '💣',
+      name: s.name,
+      title: 'Standard-Special',
+      by: 'Grundspiel',
+      text: describe(s.effects ?? []),
+    }));
+  } else if (tab === 'roles') {
+    items = Object.values(ROLES).map((r) => ({
+      emoji: r.emoji || '👑',
+      name: r.name,
+      title: `Rolle (${r.cards >= 0 ? '+' : ''}${r.cards} Startkarten)`,
+      by: 'Geheime Rolle',
+      text: r.text,
+    }));
+  }
+
+  almanachContent.innerHTML = items.map((it) => `
+    <div class="almanach-card">
+      <div class="almanach-card-top">
+        <div class="almanach-emoji">${it.emoji}</div>
+        <div class="almanach-meta">
+          <div class="almanach-name">${it.name}</div>
+          <div class="almanach-title">${it.title}</div>
+          ${it.by ? `<div class="almanach-by">${it.by}</div>` : ''}
+        </div>
+      </div>
+      <div class="almanach-text">${it.text || ''}</div>
+    </div>
+  `).join('');
+}
+
+if (btnAlmanach && modalAlmanach) {
+  btnAlmanach.onclick = () => {
+    modalAlmanach.hidden = false;
+    renderAlmanachTab(activeTab);
+  };
+  if (closeAlmanach) closeAlmanach.onclick = () => { modalAlmanach.hidden = true; };
+  modalAlmanach.onclick = (e) => {
+    if (e.target === modalAlmanach) modalAlmanach.hidden = true;
+  };
+  document.querySelectorAll('.almanach-tabs .tab-btn').forEach((b) => {
+    b.onclick = () => renderAlmanachTab(b.dataset.tab);
+  });
+}
 
 // ── Branding ─────────────────────────────────────────────
 document.title = CARD_BRAND.title;
@@ -133,6 +277,8 @@ function join(roomName) {
     history.replaceState(null, '', `?raum=${res.room}`);
     $('lobby').hidden = true;
     $('table').hidden = false;
+    sound.unlock();
+    if (sound.bgmEnabled) sound.startBGM();
     initControls();
   });
 }
@@ -169,6 +315,7 @@ if (autojoin) { sessionStorage.removeItem('karten-autojoin'); setTimeout(() => j
 if ($('room').value) $('join').textContent = `➡️ ${$('room').value} beitreten`;
 
 socket.on('arts', (a) => { arts = a; if (view) render(); });
+let lastSeenLog = null;
 socket.on('view', (v) => {
   const myTurnBefore = view?.turn === me;
   view = v;
@@ -176,7 +323,51 @@ socket.on('view', (v) => {
   selected = new Set([...selected].filter((id) => ids.has(id)));
   focus = Math.min(focus, Math.max(0, v.hand.length - 1));
   render();
-  if (!myTurnBefore && v.turn === me && v.state === 'playing') navigator.vibrate?.(60);
+
+  // Akustische Rückmeldung für Spielereignisse am Tisch
+  const lastLog = v.log[v.log.length - 1];
+  if (lastLog && lastLog !== lastSeenLog) {
+    lastSeenLog = lastLog;
+    if (lastLog.includes('nimmt den Stapel')) {
+      sound.playTake();
+    } else if (lastLog.includes('Phönix-Asche')) {
+      sound.playPhoenix();
+    } else if (lastLog.includes('Schwarzes Loch') || lastLog.includes('Singularität')) {
+      sound.playBlackHole();
+    } else if (lastLog.includes('Chronos') || lastLog.includes('Zeit')) {
+      sound.playTimestop();
+    } else if (lastLog.includes('Aegis') || lastLog.includes('Nullifizierung')) {
+      sound.playShield();
+    } else if (lastLog.includes('Blitz') || lastLog.includes('Karma')) {
+      sound.playThunder();
+    } else if (lastLog.includes('Portal')) {
+      sound.playPortal();
+    } else if (lastLog.includes('Ouroboros') || lastLog.includes('Zeitschleife')) {
+      sound.playTimeloop();
+    } else if (lastLog.includes('Beben') || lastLog.includes('Tektonischer Schock')) {
+      sound.playEarthquake();
+    } else if (lastLog.includes('verbrennt') || lastLog.includes('Feuer')) {
+      sound.playBurn();
+    } else if (lastLog.includes('Kartoffel')) {
+      sound.playPotato();
+    } else if (lastLog.includes('spielt')) {
+      const topCard = v.pile[v.pile.length - 1];
+      if (topCard) sound.playCardSound(topCard);
+      else sound.playMagicChime();
+    } else if (lastLog.includes('Farb-Überladung') || lastLog.includes('Kettenfluch')) {
+      sound.playChainCurse();
+    } else if (lastLog.includes('Farb-Resonanz')) {
+      const topCard = v.pile[v.pile.length - 1];
+      sound.playResonance(topCard?.color);
+    } else if (lastLog.includes('legt')) {
+      sound.playCardSnap();
+    }
+  }
+
+  if (!myTurnBefore && v.turn === me && v.state === 'playing') {
+    vibrate([40, 50, 40]);
+    sound.playTurn();
+  }
   if (v.state === 'playing' && v.game !== seenGame && v.drawn) { seenGame = v.game; $('ranking').hidden = true; playIntro(v); }
   if (v.state === 'over' && v.ranking && shownRanking !== v.game) { shownRanking = v.game; showRanking(v); }
   showFx(v.fx);
@@ -269,10 +460,13 @@ function render() {
     el.style.transform = `rotate(${(c.id * 37 % 21) - 10}deg) translate(${i * 3}px, ${i * 2}px)`;
     $('pile').append(el);
   });
+  const topCard = v.pile[v.pile.length - 1];
+  const topElem = topCard?.color ? COLOR_ELEMENTS[topCard.color] : null;
+  const elemTag = topElem ? `  ·  ${topElem.icon} ${topElem.gem}` : '';
   const dirArrow = v.dir === 1 ? '↻' : '↺';
   $('pile').querySelectorAll('.card').forEach((el) => { el.style.cursor = 'default'; });
   $('pile-info').textContent = v.state === 'playing'
-    ? (v.top ? `Zu toppen: ${v.lower ? '≤' : '≥'} ${v.top}` : 'Alles geht!') + (v.sphere && v.top ? ` (oder ${v.top - 1})` : '') + `  ·  ${v.pileCount} im Stapel  ·  ${dirArrow}`
+    ? (v.top ? `Zu toppen: ${v.lower ? '≤' : '≥'} ${v.top}` : 'Alles geht!') + (v.sphere && v.top ? ` (oder ${v.top - 1})` : '') + elemTag + `  ·  ${v.pileCount} im Stapel  ·  ${dirArrow}`
     : v.state === 'over' ? 'Runde vorbei' : `${v.players.length} am Tisch`;
 
   // ♊ freie Farben als Punkte hinter der Stapel-Info
@@ -306,10 +500,20 @@ function render() {
     el.style.setProperty('--x', `${(i - (n - 1) / 2) * stepX}px`);
     el.style.setProperty('--y', `${t * t * 22}px`);
     el.style.setProperty('--r', `${t * 9}deg`);
+    el.style.setProperty('--i', i);
+    el.style.setProperty('--hand-n', n);
     el.style.zIndex = i;
+    const isPlayable = myTurn && playable([c]);
+    const isResonantBonus = myTurn && isPlayable && c.kind === 'number' && topCard?.color === c.color &&
+      (!v.lower ? c.value < v.top : c.value > v.top);
     if (selected.has(c.id)) el.classList.add('selected');
     if (myTurn && i === focus && usingPad) el.classList.add('focus');
-    if (myTurn && !playable([c])) el.classList.add('dim');
+    if (myTurn && !isPlayable) el.classList.add('dim');
+    if (isPlayable) el.classList.add('playable');
+    if (isResonantBonus) {
+      el.classList.add('resonant');
+      el.title = `Farb-Resonanz! Erlaubt unter ${v.top} zu legen.`;
+    }
     el.onclick = () => { focus = i; toggle(c); };
     $('hand').append(el);
   });
@@ -352,7 +556,13 @@ function playable(cards) {
   if (!view.top) return true;
   if (view.wild && cards.every((c) => view.wild.includes(c.color))) return true;
   if (view.sphere && v === view.top - 1) return true;
-  return view.lower ? v <= view.top : v >= view.top;
+
+  // Farbresonanz: gleiche Farbe wie Tischkarte erlaubt Abweichung um bis zu 2 Punkte
+  const topCard = view.pile?.[view.pile.length - 1];
+  const resonant = Boolean(topCard?.color && cards.every((c) => c.kind === 'number' && c.color === topCard.color));
+  const tol = resonant ? 2 : 0;
+
+  return view.lower ? v <= (view.top + tol) : v >= Math.max(1, view.top - tol);
 }
 function isJesterCombo(cards) {
   return cards.length === 2 && cards.map((c) => c.ability).sort().join('+') === 'luckyJester+sadJester';
@@ -393,11 +603,33 @@ async function playSelected() {
     const t = await pick('😢 Wer soll mit dir weinen?', others);
     if (!t) return;
     choice = { target: t };
+  } else if (cards[0].ability === 'thief') {
+    const t = await pick('🥷 Wen möchtest du bestehlen?', others);
+    if (!t) return;
+    choice = { target: t };
+  } else if (cards[0].ability === 'divineWrath') {
+    const t = await pick('⚡ Wen soll der Göttliche Blitz treffen?', others);
+    if (!t) return;
+    choice = { target: t };
+  } else if (cards[0].ability === 'chainCurse') {
+    const t = await pick('⛓️ Wen soll der Kettenfluch treffen? (zieht 2)', others);
+    if (!t) return;
+    choice = { target: t };
+  } else if (cards[0].ability === 'zenBuff') {
+    const t = await pick('🧘‍♀️ Wer erhält Džanas Zen-Vibes? (wirft 2 ab, Tisch wird 15)', others);
+    if (!t) return;
+    choice = { target: t };
+  } else if (cards[0].ability === 'fairyTrick') {
+    const t = await pick('🧚‍♀️ Wen soll der Feen-Streich treffen? (Spezialkarte stehlen oder 2 ziehen)', others);
+    if (!t) return;
+    choice = { target: t };
   } else if (cards[0].ability === 'twins') {
     const cs = await pickColors();
     if (!cs) return;
     choice = { colors: cs };
   }
+  if (cards.length) sound.playCardSound(cards[0]);
+  vibrate(25);
   act('play', { ids, choice });
 }
 
@@ -443,7 +675,7 @@ function pickColors() {
     ov.querySelector('.cancel').onclick = () => { ov.hidden = true; resolve(null); };
   });
 }
-const take = () => act('take', null);
+const take = () => { sound.playTake(); vibrate(45); act('take', null); };
 
 let toastTimer;
 function toast(text) {
@@ -573,7 +805,11 @@ function drawSpecial(v) {
   requestAnimationFrame(() => requestAnimationFrame(() => {
     strip.style.transform = `translateX(${winW / 2 - (target * (cw + gap) + cw / 2) + (Math.random() * 40 - 20)}px)`;
   }));
+  const tickInt = setInterval(() => sound.playWheelTick(), 130);
+  introTimers.push(setTimeout(() => clearInterval(tickInt), 3200));
   introTimers.push(setTimeout(() => {
+    clearInterval(tickInt);
+    sound.playCardSound(v.drawn);
     navigator.vibrate?.([60, 40, 120]);
     strip.querySelector('.target')?.classList.add('won');
     const ex = $('drawn-explain');
@@ -587,12 +823,111 @@ function drawSpecial(v) {
 }
 function closeIntro() { introTimers.forEach(clearTimeout); introTimers = []; $('intro').hidden = true; }
 
-// ═════════ Abrechnung am Spielende ═════════
+// ═════════ Abrechnung & Post-Game Reveal ═════════
 function showRanking(v) {
   closeIntro();
+  sound.playWin();
   const box = $('ranking');
   box.hidden = false;
-  box.innerHTML = '<div class="intro-window"><h2>🏁 Abrechnung</h2><ol class="rank"></ol><p class="hint"></p><button class="skip" id="close-ranking">Zum Tisch</button></div>';
+
+  const winner = v.ranking?.[0];
+  if (winner?.id === me) {
+    vibrate([100, 50, 100, 50, 200]);
+  } else {
+    vibrate([60, 60, 100]);
+  }
+  const winnerAvatar = winner ? arts[winner.id]?.avatar : null;
+  const isHost = v.host === me;
+
+  let awardsHtml = '';
+  if (v.awards && v.awards.length) {
+    awardsHtml = `
+      <div class="post-game-section">
+        <div class="section-title">🎖️ Fun Awards der Runde</div>
+        <div class="awards-grid">
+          ${v.awards.map((a) => {
+            const isMe = a.playerIds?.includes(me);
+            return `
+              <div class="award-card ${isMe ? 'award-me' : ''}">
+                <div class="award-icon">${a.emoji}</div>
+                <div class="award-body">
+                  <div class="award-title">${a.title}</div>
+                  <div class="award-recipient">${a.playerName}${isMe ? ' (Du)' : ''}</div>
+                  <div class="award-val">${a.valText}</div>
+                  <div class="award-desc">${a.desc}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  const rolesHtml = `
+    <div class="post-game-section">
+      <div class="section-title">🤫 Enthüllte Rollen</div>
+      <div class="roles-reveal-grid">
+        ${v.ranking.map((r) => {
+          const av = arts[r.id]?.avatar;
+          const role = r.role;
+          const isMe = r.id === me;
+          const faceStyle = av ? `background-image: url("${av}")` : '';
+          const faceContent = av ? '' : r.name.slice(0, 2).toUpperCase();
+          return `
+            <div class="role-reveal-card ${isMe ? 'role-me' : ''}">
+              <div class="role-avatar" style="${faceStyle}">${faceContent}</div>
+              <div class="role-reveal-info">
+                <div class="role-player-name">${r.name}${isMe ? ' <span class="tag-me">Du</span>' : ''}</div>
+                ${role ? `
+                  <div class="role-badge"><span class="role-badge-emoji">${role.emoji}</span> <b class="role-badge-name">${role.name}</b></div>
+                  <div class="role-passive">${role.text || ''}</div>
+                ` : '<div class="role-passive">Keine Rolle</div>'}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  box.innerHTML = `
+    <div class="intro-window post-game-window">
+      <div class="post-game-header">
+        <div class="confetti-crown">🏆</div>
+        <h2>Siegerehrung & Reveal</h2>
+      </div>
+
+      ${winner ? `
+        <div class="winner-hero">
+          <div class="winner-avatar" style="${winnerAvatar ? `background-image: url('${winnerAvatar}')` : ''}">
+            ${winnerAvatar ? '' : winner.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div class="winner-info">
+            <div class="winner-title">Sieger*in der Runde</div>
+            <div class="winner-name">${winner.name}</div>
+            <div class="winner-sub">Hat alle Karten triumphal abgelegt!</div>
+          </div>
+        </div>
+      ` : ''}
+
+      ${awardsHtml}
+
+      ${rolesHtml}
+
+      <div class="post-game-section">
+        <div class="section-title">🏁 Endplatzierung</div>
+        <ol class="rank"></ol>
+      </div>
+
+      <p class="hint">${isHost ? 'Du bist Host – starte die nächste Runde direkt hier oder unten.' : 'Der Host startet gleich die nächste Runde.'}</p>
+      <div class="post-game-actions">
+        ${isHost ? '<button class="skip host-restart" id="btn-next-round">🚀 Nächste Runde</button>' : ''}
+        <button class="skip btn-secondary" id="close-ranking">Zum Tisch</button>
+      </div>
+    </div>
+  `;
+
   const medals = ['🥇', '🥈', '🥉'];
   v.ranking.forEach((r, i) => {
     const li = document.createElement('li');
@@ -604,7 +939,14 @@ function showRanking(v) {
     li.querySelector('.cnt').textContent = i === 0 ? 'keine Karten!' : `${r.count} Karten`;
     box.querySelector('.rank').append(li);
   });
-  box.querySelector('.hint').textContent = v.host === me ? 'Du bist Host – starte die nächste Runde unten.' : 'Der Host startet gleich die nächste Runde.';
+
+  const btnNext = box.querySelector('#btn-next-round');
+  if (btnNext) {
+    btnNext.onclick = () => {
+      box.hidden = true;
+      $('start')?.click();
+    };
+  }
   $('close-ranking').onclick = () => { box.hidden = true; };
 }
 
