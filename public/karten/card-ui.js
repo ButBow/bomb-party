@@ -1,6 +1,4 @@
-// Baut eine Karte als HTML-Element. Wird im Spiel UND im Editor benutzt.
-
-import { cardText, CHARACTERS } from '/shared/cards.js';
+import { cardText, CHARACTERS, COLOR_ELEMENTS } from '/shared/cards.js';
 import { SERVER } from '/js/net.js';
 
 export function cardEl(c, arts = {}) {
@@ -9,8 +7,18 @@ export function cardEl(c, arts = {}) {
   el.dataset.id = c.id;
 
   if (c.kind === 'number') {
+    const elem = COLOR_ELEMENTS?.[c.color] || { name: '', element: 'neutral', icon: '', gem: '' };
+    el.classList.add('element-' + (elem.element || 'neutral'));
     el.style.setProperty('--c', c.color);
-    el.innerHTML = `<span class="corner tl">${c.value}</span><span class="v">${c.value}</span><span class="corner br">${c.value}</span>`;
+    el.innerHTML = `
+      <div class="corner tl"><span class="corner-val">${c.value}</span><span class="corner-icon">${elem.icon}</span></div>
+      <div class="card-center">
+        <span class="elem-watermark">${elem.icon}</span>
+        <span class="v">${c.value}</span>
+        <span class="elem-name">${elem.gem}</span>
+      </div>
+      <div class="corner br"><span class="corner-val">${c.value}</span><span class="corner-icon">${elem.icon}</span></div>
+    `;
     return el;
   }
 

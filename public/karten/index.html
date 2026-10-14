@@ -4,19 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#14121f" />
-  <title>Club Bombe Spiel</title>
+  <title>TOPP DAS!</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🃏</text></svg>" />
   <link rel="stylesheet" href="karten.css" />
 </head>
 <body>
+  <!-- ── Steuerleiste: Musik, Sound, Vibration, Vollbild, Almanach ── -->
+  <div id="audio-controls">
+    <button id="toggle-bgm" title="Hintergrundmusik an/aus" type="button">🎵</button>
+    <button id="toggle-sfx" title="Soundeffekte an/aus" type="button">🔊</button>
+    <button id="toggle-vib" title="Haptisches Vibrations-Feedback an/aus" type="button">📳</button>
+    <button id="toggle-fullscreen" title="Vollbildmodus umschalten" type="button">⛶</button>
+    <button id="open-almanach" title="📖 Club-Almanach & Kartengalerie" type="button">📖</button>
+  </div>
+
   <!-- ── Lobby: du + deine Bomben-Karte ── -->
   <main id="lobby">
-    <div class="club">
-      <img src="/brand/wappen.svg" alt="Wappen" class="crest" />
-      <img src="/brand/vwbb-logo.png" alt="Von Wien bis Berlin" class="club-logo" />
-      <span class="club-tag">ClubApp</span>
-    </div>
-    <h1 id="title">Club Bombe Spiel</h1>
+    <h1 id="title">TOPP DAS!</h1>
     <p id="tagline"></p>
 
     <section class="step">
@@ -64,15 +68,6 @@
   <!-- ── Der Tisch (Ego-Perspektive) ── -->
   <section id="table" hidden>
     <div id="felt-wrap"><div id="felt"></div></div>
-    <div id="club-badge"><img src="/brand/wappen.svg" alt="" /><img src="/brand/vwbb-logo.png" alt="" class="wm-logo" /></div>
-    <button id="chat-btn" aria-label="Chat">💬<span id="chat-unread" hidden></span></button>
-    <aside id="chat" hidden>
-      <header><b>💬 Tisch-Chat</b><button id="chat-close" aria-label="Schließen">✕</button></header>
-      <ol id="chat-list"></ol>
-      <div class="chat-quick"></div>
-      <form id="chat-form"><input id="chat-input" maxlength="200" placeholder="Nachricht …" autocomplete="off" /><button>➤</button></form>
-    </aside>
-    <div id="fx-banner"></div>
     <div id="players"></div>
     <div id="center">
       <div id="pile"></div>
@@ -86,28 +81,85 @@
       <button id="play" class="primary">Legen ⬆️</button>
     </div>
     <div id="pov">
-      <!-- Arme + Handflächen liegen HINTER den Karten … -->
-      <svg class="arm left" viewBox="0 0 300 300" aria-hidden="true">
-        <path class="sleeve" d="M-40 330 L-40 210 L150 120 L210 205 L60 330 Z" />
-        <path class="cuff" d="M128 128 L168 108 L222 188 L186 214 Z" />
-        <ellipse class="glove" cx="205" cy="128" rx="58" ry="52" />
-        <path class="glove" d="M220 80 q30 -20 52 -4 q12 14 -8 26 l-30 14 z" />
+      <!-- Elegante Spieler-Arme & Handschuhe (hinter den Karten) -->
+      <svg class="arm left" viewBox="0 0 340 340" aria-hidden="true">
+        <defs>
+          <linearGradient id="suit-grad" x1="0%" y1="100%" x2="80%" y2="0%">
+            <stop offset="0%" stop-color="#0a0914" />
+            <stop offset="50%" stop-color="#181528" />
+            <stop offset="100%" stop-color="#28233f" />
+          </linearGradient>
+          <linearGradient id="cuff-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ffffff" />
+            <stop offset="60%" stop-color="#e2e0ed" />
+            <stop offset="100%" stop-color="#b6b1cf" />
+          </linearGradient>
+          <linearGradient id="gold-gem" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fff285" />
+            <stop offset="50%" stop-color="#f5ba20" />
+            <stop offset="100%" stop-color="#8c6407" />
+          </linearGradient>
+          <linearGradient id="glove-grad" x1="15%" y1="90%" x2="85%" y2="10%">
+            <stop offset="0%" stop-color="#12101e" />
+            <stop offset="40%" stop-color="#1e1a30" />
+            <stop offset="75%" stop-color="#312c4c" />
+            <stop offset="100%" stop-color="#4a4470" />
+          </linearGradient>
+          <g id="pov-arm-left-g">
+            <!-- Sakko-Ärmel -->
+            <path class="sleeve" fill="url(#suit-grad)" stroke="#06050b" stroke-width="2.5"
+                  d="M-30 380 L-30 240 C30 190, 110 150, 185 125 L245 205 C170 260, 95 340, 50 380 Z" />
+            <!-- Stoff-Faltenlinie -->
+            <path d="M20 230 C80 195, 145 160, 185 125" fill="none" stroke="#3b3558" stroke-width="3.5" stroke-linecap="round" opacity="0.6" />
+            <!-- Hemdmanschette -->
+            <path class="cuff" fill="url(#cuff-grad)" stroke="#131120" stroke-width="2.5"
+                  d="M175 130 L205 110 C212 105, 222 108, 228 115 L255 152 C260 160, 258 170, 250 176 L220 196 Z" />
+            <!-- Goldener Manschettenknopf -->
+            <circle cx="230" cy="155" r="5.5" fill="url(#gold-gem)" stroke="#473202" stroke-width="1.5" />
+            <!-- Handfläche / Knöchel -->
+            <path class="glove-palm" fill="url(#glove-grad)" stroke="#0a0814" stroke-width="2.5" stroke-linejoin="round"
+                  d="M205 115 C222 98, 245 95, 265 106 L285 125 C304 144, 300 172, 280 188 L248 195 C228 190, 212 175, 205 150 Z" />
+            <!-- 4 Finger hinter den Karten -->
+            <path class="finger" fill="url(#glove-grad)" stroke="#0a0814" stroke-width="2"
+                  d="M260 102 C275 82, 290 76, 302 86 C310 95, 304 110, 284 122 Z" />
+            <path class="finger" fill="url(#glove-grad)" stroke="#0a0814" stroke-width="2"
+                  d="M280 120 C298 104, 316 102, 324 114 C330 126, 318 138, 296 145 Z" />
+            <path class="finger" fill="url(#glove-grad)" stroke="#0a0814" stroke-width="2"
+                  d="M292 142 C310 132, 325 136, 328 148 C330 160, 314 170, 288 172 Z" />
+            <path class="finger" fill="url(#glove-grad)" stroke="#0a0814" stroke-width="2"
+                  d="M286 170 C302 165, 314 170, 312 182 C310 192, 296 195, 276 190 Z" />
+          </g>
+        </defs>
+        <use href="#pov-arm-left-g" />
       </svg>
-      <svg class="arm right" viewBox="0 0 300 300" aria-hidden="true">
-        <path class="sleeve" d="M-40 330 L-40 210 L150 120 L210 205 L60 330 Z" />
-        <path class="cuff" d="M128 128 L168 108 L222 188 L186 214 Z" />
-        <ellipse class="glove" cx="205" cy="128" rx="58" ry="52" />
-        <path class="glove" d="M220 80 q30 -20 52 -4 q12 14 -8 26 l-30 14 z" />
+      <svg class="arm right" viewBox="0 0 340 340" aria-hidden="true">
+        <use href="#pov-arm-left-g" />
       </svg>
       <div id="hand"></div>
-      <!-- … nur die Daumen liegen DRÜBER, wie beim echten Halten -->
-      <svg class="thumb left" viewBox="0 0 120 120" aria-hidden="true">
-        <path class="glove" d="M18 104 C 8 80, 30 50, 62 26 C 78 14, 100 22, 96 40 C 92 54, 70 66, 56 90 C 46 108, 26 116, 18 104 Z" />
-        <path class="crease" d="M58 46 q10 6 18 2" />
+      <!-- Daumen liegen DRÜBER und halten die Karten fest -->
+      <svg class="thumb left" viewBox="0 0 130 130" aria-hidden="true">
+        <defs>
+          <linearGradient id="thumb-grad" x1="15%" y1="95%" x2="85%" y2="5%">
+            <stop offset="0%" stop-color="#100f1c" />
+            <stop offset="40%" stop-color="#1f1b32" />
+            <stop offset="80%" stop-color="#383256" />
+            <stop offset="100%" stop-color="#554d80" />
+          </linearGradient>
+          <filter id="thumb-shadow" x="-30%" y="-30%" width="170%" height="170%">
+            <feDropShadow dx="3" dy="6" stdDeviation="5" flood-color="#000000" flood-opacity="0.75" />
+          </filter>
+          <g id="thumb-left-shape">
+            <path filter="url(#thumb-shadow)" fill="url(#thumb-grad)" stroke="#080710" stroke-width="2.5" stroke-linejoin="round"
+                  d="M16 128 C10 102, 18 78, 38 56 C52 42, 68 28, 86 18 C102 10, 116 14, 120 28 C124 42, 110 58, 92 72 C74 86, 56 104, 46 128 Z" />
+            <path d="M40 62 C58 48, 80 34, 98 26" fill="none" stroke="#7167a6" stroke-width="2.5" stroke-linecap="round" opacity="0.8" />
+            <path d="M64 58 C72 64, 82 62, 88 56" fill="none" stroke="#0e0d16" stroke-width="2.5" stroke-linecap="round" opacity="0.7" />
+            <path d="M44 90 C52 96, 62 94, 68 88" fill="none" stroke="#0e0d16" stroke-width="2.5" stroke-linecap="round" opacity="0.7" />
+          </g>
+        </defs>
+        <use href="#thumb-left-shape" />
       </svg>
-      <svg class="thumb right" viewBox="0 0 120 120" aria-hidden="true">
-        <path class="glove" d="M18 104 C 8 80, 30 50, 62 26 C 78 14, 100 22, 96 40 C 92 54, 70 66, 56 90 C 46 108, 26 116, 18 104 Z" />
-        <path class="crease" d="M58 46 q10 6 18 2" />
+      <svg class="thumb right" viewBox="0 0 130 130" aria-hidden="true">
+        <use href="#thumb-left-shape" />
       </svg>
     </div>
     <div id="explain" hidden></div>
@@ -115,6 +167,21 @@
     <div id="intro" class="overlay" hidden></div>
     <div id="ranking" class="overlay" hidden></div>
     <div id="picker" class="overlay" hidden></div>
+    <div id="almanach-modal" class="overlay" hidden>
+      <div class="almanach-window">
+        <div class="almanach-header">
+          <h2>📖 Club-Almanach & Kartengalerie</h2>
+          <button id="almanach-close" type="button" class="close-btn" title="Schließen">✕</button>
+        </div>
+        <div class="almanach-tabs">
+          <button class="tab-btn active" data-tab="club">🏛️ Club & Specials</button>
+          <button class="tab-btn" data-tab="characters">🎭 Charaktere</button>
+          <button class="tab-btn" data-tab="specials">💣 Standard-Specials</button>
+          <button class="tab-btn" data-tab="roles">👑 Rollen & Passive</button>
+        </div>
+        <div id="almanach-content" class="almanach-grid"></div>
+      </div>
+    </div>
     <div id="toast"></div>
   </section>
 
