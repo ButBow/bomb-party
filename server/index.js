@@ -151,7 +151,7 @@ setInterval(() => {
   }
 }, 1000 * dt);
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3001;
 http.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🎮 ${BRAND.title} läuft!\n`);
   console.log(`   Auf diesem Rechner:  http://localhost:${PORT}`);
