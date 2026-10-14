@@ -102,6 +102,8 @@ test('Kartentisch: hinsetzen, Tisch-Liste, Host startet, alle bekommen ihre eige
   // Während der Los-Animation darf noch niemand legen
   const [who, view] = va.turn === `Anna-${room}` ? [anna, va] : [ben, vb];
   assert.match((await ask(who, 'play', [view.hand[0].id])).error, /warten/);
+  // ☝️ „Letzte Karte!“ ohne Anlass: abgelehnt
+  assert.match((await ask(who, 'last-card')).error, /nichts/);
 });
 
 test('Kartentisch: Chat geht an alle, Neue bekommen den Verlauf', async () => {

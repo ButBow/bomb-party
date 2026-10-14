@@ -783,6 +783,20 @@ input, select { background: #2b2a45; color: #fff; }
   box-shadow: 0 6px 0 #1a1830 !important;
 }
 
+/* ═════════ ☝️ Letzte Karte! – taucht irgendwo auf, 2 Sekunden Zeit ═════════ */
+#last-card { position: absolute; z-index: 80; left: var(--lc-x, 50%); top: var(--lc-y, 40%); transform: translate(-50%, -50%);
+  width: max-content; min-width: min(320px, 82vw); white-space: nowrap; padding: 24px 30px 30px; overflow: hidden;
+  font-size: clamp(1.5rem, 5vw, 2.2rem); font-weight: 900; letter-spacing: .03em; color: #120f20;
+  background: #ffd23d; border: 4px solid #fff; border-radius: 22px;
+  box-shadow: 0 0 0 6px var(--accent), 0 18px 50px #000c, 0 0 70px #ffd23daa;
+  animation: lc-pop .18s ease-out, lc-pulse .45s ease-in-out .18s infinite alternate; }
+#last-card:hover { background: #ffe26b; }
+#last-card i { position: absolute; left: 0; bottom: 0; width: 100%; height: 9px; background: var(--accent);
+  transform-origin: left; animation: lc-time var(--lc-ms, 2000ms) linear forwards; }
+@keyframes lc-pop { from { transform: translate(-50%, -50%) scale(.3); } to { transform: translate(-50%, -50%) scale(1); } }
+@keyframes lc-pulse { to { transform: translate(-50%, -50%) scale(1.07); } }
+@keyframes lc-time { to { transform: scaleX(0); } }
+
 /* ═════════ Club-Almanach & Galerie ═════════ */
 .almanach-window {
   width: min(840px, 94vw);

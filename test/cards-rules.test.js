@@ -351,3 +351,98 @@ test('🥔 Kartoffel an den Glücklichen Schelm: bleibt bei dir – und du ziehs
   assert.equal(p.hand.length, 2 + 9);
   assert.equal(t.hand.length, 1);
 });
+
+// ── ☝️ Letzte Karte! ─────────────────────────────────────────
+// Legt die erste von zwei Karten – danach hat die aktuelle Person genau noch eine
+function downToOne(r) {
+  const p = r.current();
+  p.hand = [num(5), num(9)];
+  assert.equal(r.play(p.id, [p.hand[0].id]).ok, true);
+  assert.equal(p.hand.length, 1);
+  return p;
+}
+const LATER = () => Date.now() + 60_000;
+
+test('Letzte Karte: wer auf 1 Karte kommt, bekommt den Knopf – nur er/sie sieht ihn', () => {
+  const r = table(2);
+  const p = downToOne(r);
+  const other = r.players.find((o) => o !== p);
+  const lc = r.view(p.id).lastCall;
+  assert.ok(lc && lc.ms > 0 && lc.ms <= RULES.lastCardSeconds * 1000, JSON.stringify(lc));
+  assert.equal(r.view(other.id).lastCall, null);
+  assert.equal(r.expireLastCalls(Date.now()), false);   // noch Zeit
+  assert.ok(r.nextLastCallIn() > 0);
+});
+
+test('Letzte Karte: rechtzeitig gedrückt → keine Strafe, kein zweiter Knopf', () => {
+  const r = table(2);
+  const p = downToOne(r);
+  assert.equal(r.callLast(p.id).ok, true);
+  assert.match(r.log.join('\n'), /LETZTE KARTE/);
+  assert.equal(r.view(p.id).lastCall, null);
+  assert.equal(r.nextLastCallIn(), null);
+  r.watchLastCards();                                    // nächster Zug: bleibt erledigt
+  assert.equal(r.view(p.id).lastCall, null);
+  assert.equal(r.expireLastCalls(LATER()), false);
+  assert.equal(p.hand.length, 1);
+});
+
+test('Letzte Karte: verpasst → zufällig 3 bis 4 Strafkarten (auch über den Sekundentakt)', () => {
+  const [min, max] = RULES.lastCardPenalty;
+  const seen = new Set();
+  for (let i = 0; i < 30; i++) {
+    const r = table(2);
+    const p = downToOne(r);
+    if (i % 2) assert.equal(r.expireLastCalls(LATER()), true);
+    else assert.equal(r.tick(LATER()), true);
+    const drawn = p.hand.length - 1;
+    assert.ok(drawn >= min && drawn <= max, `${drawn} gezogen`);
+    seen.add(drawn);
+    assert.equal(r.view(p.id).lastCall, null);
+    assert.match(r.log.join('\n'), /verpennt/);
+    assert.equal(r.expireLastCalls(LATER()), false);    // nur einmal bestraft
+  }
+  assert.equal(seen.size, max - min + 1, 'mal 3, mal 4');
+});
+
+test('Letzte Karte: ohne Anlass oder zu spät drücken bringt nichts', () => {
+  const r = table(2);
+  assert.match(r.callLast(r.current().id).error, /nichts/);
+  const p = downToOne(r);
+  assert.match(r.callLast(p.id, LATER()).error, /spät/);
+  assert.equal(r.expireLastCalls(LATER()), true);       // die Strafe kommt trotzdem
+});
+
+test('Letzte Karte: wer vorher wieder Karten bekommt, wird nicht bestraft – bei 1 Karte gibt es eine neue Chance', () => {
+  const r = table(2);
+  const p = downToOne(r);
+  const first = r.view(p.id).lastCall.token;
+  p.hand.push(num(2), num(3));
+  r.watchLastCards();
+  assert.equal(r.view(p.id).lastCall, null);
+  assert.equal(r.expireLastCalls(LATER()), false);
+  assert.equal(p.hand.length, 3);
+  p.hand.splice(1);
+  r.watchLastCards();
+  assert.ok(r.view(p.id).lastCall.token > first);
+});
+
+test('Letzte Karte: letzte Karte gleich gelegt → Sieg, keine Strafe danach', () => {
+  const r = table(2);
+  const p = downToOne(r);
+  r.turn = r.players.indexOf(p);
+  assert.equal(r.play(p.id, [p.hand[0].id]).ok, true);
+  assert.equal(r.state, 'over');
+  assert.equal(r.winner, p.id);
+  assert.equal(r.expireLastCalls(LATER()), false);
+  assert.equal(r.view(p.id).lastCall, null);
+});
+
+test('Letzte Karte: neues Spiel startet ohne alte Knöpfe', () => {
+  const r = table(2);
+  const p = downToOne(r);
+  r.finish(null);
+  assert.equal(r.start(r.host().id).ok, true);
+  assert.equal(p.lastCall, null);
+  assert.equal(r.nextLastCallIn(), null);
+});

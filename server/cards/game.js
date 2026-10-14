@@ -6,6 +6,7 @@
 import { RULES, BASIC_SPECIALS, CHARACTERS, PLAYER_CARDS, JESTER_COMBO, ROLES, EFFECTS, cardText, validateEffects, COLOR_ELEMENTS, COLOR_RESONANCE_TOLERANCE } from '../../shared/cards.js';
 
 let nextCardId = 1;
+const LAST_CARD_GRACE_MS = 400;   // ☝️ Puffer fürs Netz – angezeigt werden die vollen RULES.lastCardSeconds
 const card = (props) => ({ id: nextCardId++, ...props });
 
 export class CardRoom {
@@ -15,6 +16,7 @@ export class CardRoom {
     this.state = 'lobby';     // 'lobby' | 'playing' | 'over'
     this.log = [];
     this.game = 0;            // zählt Spiele hoch – der Browser erkennt daran „neues Spiel → Intro zeigen“
+    this.lastCallSeq = 0;     // ☝️ jede „Letzte Karte!“-Chance bekommt eine eigene Nummer
     this.reset();
   }
 
@@ -91,6 +93,7 @@ export class CardRoom {
         changed = true;
       }
     }
+    if (this.expireLastCalls(now)) changed = true;   // Notnagel, falls der genaue Timer nicht gegriffen hat
     const cur = this.current();
     if (this.state === 'playing' && cur && !cur.connected && now - cur.awaySince > RULES.awaySkipSeconds * 1000
         && now - (cur.lastSkipped || 0) > RULES.awaySkipSeconds * 1000) {
@@ -134,6 +137,8 @@ export class CardRoom {
     for (const p of this.players) {
       p.inGame = true;
       p.role = pickRole();
+      p.lastCall = null;      // ☝️ offene „Letzte Karte!“-Chance { token, until }
+      p.saidLast = false;     // ☝️ schon gerufen (gilt, bis man wieder mehr oder weniger als 1 Karte hat)
       p.stats = { resonance: 0, pileCards: 0, drawnCards: 0, specials: 0 };
       // Ausgeloste Specials: Standardmäßig RULES.specialsStart (2), Erzmagier bekommt 3
       const count = p.role === 'magier' ? 3 : (RULES.specialsStart || 2);
@@ -791,7 +796,52 @@ export class CardRoom {
       return { ok: true };
     }
     if (!again) this.advance(1 + skip);
+    this.watchLastCards();
     return { ok: true };
+  }
+
+  // ── ☝️ Letzte Karte! ──────────────────────────────────────
+  // Wer auf genau eine Karte kommt, muss innerhalb von RULES.lastCardSeconds „Letzte Karte!“ drücken –
+  // sonst zieht er/sie zufällig 3–4 Strafkarten (RULES.lastCardPenalty).
+  watchLastCards(now = Date.now()) {
+    for (const o of this.active()) {
+      if (o.hand.length !== 1) { o.lastCall = null; o.saidLast = false; continue; }
+      if (!o.lastCall && !o.saidLast) o.lastCall = { token: ++this.lastCallSeq, until: now + RULES.lastCardSeconds * 1000 + LAST_CARD_GRACE_MS };
+    }
+  }
+
+  callLast(id, now = Date.now()) {
+    const p = this.players.find((o) => o.id === id);
+    if (this.state !== 'playing' || !p?.lastCall) return { error: 'Gerade gibt es nichts zu rufen.' };
+    if (now > p.lastCall.until) return { error: 'Zu spät! ⏰' };
+    p.lastCall = null;
+    p.saidLast = true;
+    this.say(`☝️ ${p.name}: LETZTE KARTE!`);
+    return { ok: true };
+  }
+
+  // Abgelaufene Chancen bestrafen. Gibt true zurück, wenn jemand ziehen musste.
+  expireLastCalls(now = Date.now()) {
+    if (this.state !== 'playing') return false;
+    let changed = false;
+    for (const o of this.active()) {
+      if (!o.lastCall || now < o.lastCall.until) continue;
+      o.lastCall = null;
+      o.saidLast = true;   // bei leerem Stapel bleibt es bei 1 Karte – dann nicht gleich nochmal
+      const [min, max] = RULES.lastCardPenalty;
+      const n = min + Math.floor(Math.random() * (max - min + 1));
+      this.say(`⏰ ${o.name} hat „Letzte Karte!“ verpennt – ${n} Strafkarten!`);
+      this.draw(o, n, { global: true, penalty: true });
+      changed = true;
+    }
+    if (changed) this.watchLastCards(now);
+    return changed;
+  }
+
+  // Millisekunden bis zur nächsten ablaufenden Chance (oder null) – dafür stellt der Server einen Timer
+  nextLastCallIn(now = Date.now()) {
+    const due = this.active().filter((o) => o.lastCall).map((o) => o.lastCall.until - now);
+    return due.length ? Math.max(0, Math.min(...due)) : null;
   }
 
   advance(steps) {
@@ -1056,6 +1106,9 @@ export class CardRoom {
       })),
       hand: me?.hand ?? [],
       drawn: me?.drawn ?? null,      // deine ausgeloste Special-Karte (für die Animation)
+      // ☝️ Nur du siehst deinen Knopf: token = welche Chance, ms = wie lange noch
+      lastCall: this.state === 'playing' && me?.lastCall
+        ? { token: me.lastCall.token, ms: Math.max(0, me.lastCall.until - LAST_CARD_GRACE_MS - Date.now()) } : null,
     };
   }
 

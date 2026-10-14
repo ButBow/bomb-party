@@ -18,6 +18,8 @@ export const RULES = {
   introSeconds: 6,       // so lange laufen Rollen- und Karten-Animation am Anfang
   awaySkipSeconds: 15,   // wer die Verbindung verliert und dran ist, wird danach übersprungen
   awayKickSeconds: 120,  // … und nach so langer Abwesenheit ganz rausgenommen
+  lastCardSeconds: 2,    // ☝️ Nur noch 1 Karte? So lange hat man Zeit, „Letzte Karte!“ zu drücken …
+  lastCardPenalty: [3, 4], // … sonst zieht man zufällig so viele Strafkarten (von–bis)
 };
 
 // Die 4 Elemente der Kartenfarben (optische Gestaltung & Resonanz-Zuordnung)
