@@ -181,6 +181,7 @@ export class CardRoom {
 
     // Auswahl prüfen, BEVOR Karten die Hand verlassen
     const opp = (tid) => this.active().find((o) => o.id === tid && o !== p);
+    const anyone = (tid) => this.active().find((o) => o.id === tid);
     const combo = cards.length === 2 && cards[0].kind === 'special';
     if (combo && !(opp(choice.targets?.[0]) && opp(choice.targets?.[1]) && choice.targets[0] !== choice.targets[1])) return { error: 'Wähle zwei verschiedene Personen.' };
     if (!combo && cards[0].ability === 'sadJester' && !opp(choice.target)) return { error: 'Wähle, wer mit dir weinen soll.' };
@@ -192,6 +193,10 @@ export class CardRoom {
     if (cards[0].ability === 'twins') {
       const cs = choice.colors;
       if (!Array.isArray(cs) || cs.length !== 2 || cs[0] === cs[1] || !cs.every((c) => RULES.colors.includes(c))) return { error: 'Wähle zwei Farben.' };
+    }
+    if (cards[0].ability === 'excuseKing') {
+      const ts = choice.targets;
+      if (!(Array.isArray(ts) && anyone(ts[0]) && anyone(ts[1]) && ts[0] !== ts[1])) return { error: 'Wähle zwei verschiedene Personen.' };
     }
 
     const prevTop = this.top;
@@ -246,7 +251,10 @@ export class CardRoom {
           this.say(`🧪 ${p.name} (Alchemist) transmutiert das Paar: Wirft ${lowest.value} zusätzlich ab!`);
         }
       }
-      return this.endTurn(p, { skip: 0, again: false });
+      // 🤖 Vibe-Coder*in: genau eine Zahl über dem Tisch → die KI vervollständigt den Zug
+      const autocomplete = p.role === 'vibecoder' && prevTop > 0 && !prevLower && cards[0].value === prevTop + 1;
+      if (autocomplete) this.say(`🤖 ${p.name} (Vibe-Coder*in): Autocomplete! ${prevTop} → ${cards[0].value} – sofort nochmal dran.`);
+      return this.endTurn(p, { skip: 0, again: autocomplete });
     }
 
     this.colorStreak = { color: null, count: 0 };
@@ -519,6 +527,24 @@ export class CardRoom {
           sortHand(o.hand);
           this.say(`   → 🎆 ${o.name} verbrennt ${highest.color} ${highest.value} im Funkenregen!`);
         }
+      }
+    } else if (sp.ability === 'excuseKing') {
+      // 👑 Zwei beliebige Personen (auch man selbst) tauschen die Hände – kein Schelm kontert.
+      // Gott und die Aegis schützen trotzdem, die Kartoffel bleibt bei der Person, die sie hält.
+      const [a, b] = choice.targets.map(anyone);
+      const god = [a, b].find((x) => x !== p && x.role === 'god');
+      const shielded = !god && [a, b].find((x) => this.blocksWithAegis(x, p));
+      if (god) {
+        this.say(`☀️ ${god.name} (Gott) lässt sich auch vom König nichts sagen – kein Tausch!`);
+      } else if (shielded) {
+        this.say(`🛡️ ${shielded.name} blockt den Königs-Tausch mit der Aegis der Nullifizierung ab!`);
+      } else {
+        const isPotato = (c) => c.ability === 'potato';
+        const restA = a.hand.filter((c) => !isPotato(c));
+        a.hand = [...a.hand.filter(isPotato), ...b.hand.filter((c) => !isPotato(c))];
+        b.hand = [...b.hand.filter(isPotato), ...restA];
+        sortHand(a.hand); sortHand(b.hand);
+        this.say(`   → 👑 ${a.name} und ${b.name} tauschen die Hände. Keine Widerrede!`);
       }
     }
     for (const e of sp.effects ?? []) this.runEffect(p, e, ctx);

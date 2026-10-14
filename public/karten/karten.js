@@ -627,6 +627,13 @@ async function playSelected() {
     const cs = await pickColors();
     if (!cs) return;
     choice = { colors: cs };
+  } else if (cards[0].ability === 'excuseKing') {
+    const all = view.players.filter((p) => p.inGame).map((p) => (p.id === me ? { ...p, name: `${p.name} (du)` } : p));
+    const a = await pick('👑 Wer tauscht die Hand?', all);
+    if (!a) return;
+    const b = await pick('👑 … mit wem?', all.filter((p) => p.id !== a));
+    if (!b) return;
+    choice = { targets: [a, b] };
   }
   if (cards.length) sound.playCardSound(cards[0]);
   vibrate(25);

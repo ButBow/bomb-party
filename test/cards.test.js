@@ -121,7 +121,7 @@ test('Niemand bekommt die eigene selbst gebaute Karte', () => {
 });
 
 // ── Spielerkarten ────────────────────────────────────────────
-import { PLAYER_CARDS } from '../shared/cards.js';
+import { PLAYER_CARDS, validateEffects } from '../shared/cards.js';
 const sp = (key) => ({ id: key + Math.random(), kind: 'special', key, effects: [], ...PLAYER_CARDS[key] });
 const drawFx = (n, target = 'next') => ({ id: 'd' + Math.random(), kind: 'special', key: 'x', name: 'Zieh', emoji: '📥', effects: [{ type: 'draw', n, target }] });
 
@@ -287,6 +287,61 @@ test('🎲 Wer dabei alle Karten verliert, gewinnt', () => {
   try { r.play(p.id, [g.id]); } finally { Math.random = real; }
   assert.equal(r.state, 'over');
   assert.equal(r.winner, p.id);
+});
+
+test('👑 Ausreden-König: zwei Personen tauschen die Hände – kein Schelm kontert', () => {
+  const r = table(3);
+  const p = r.current();
+  const [a, b] = r.players.filter((o) => o !== p);
+  a.hand = [sp('gluecklich'), num(1)]; b.hand = [num(2), num(3), num(4)];
+  const k = sp('ausreden');
+  p.hand = [k, num(9)];
+  assert.match(r.play(p.id, { ids: [k.id], choice: { targets: [a.id, a.id] } }).error, /zwei verschiedene/);
+  assert.equal(r.play(p.id, { ids: [k.id], choice: { targets: [a.id, b.id] } }).ok, true);
+  assert.equal(a.hand.length, 3);
+  assert.equal(b.hand.length, 2);
+  assert.ok(b.hand.some((c) => c.ability === 'luckyJester'));   // Schelm wandert mit, statt zu kontern
+});
+
+test('👑 … auch mit sich selbst – die Kartoffel bleibt, wo sie ist', () => {
+  const r = table(2);
+  const p = r.current();
+  const t = r.players.find((o) => o !== p);
+  t.hand = [sp('kartoffel'), num(1), num(2)];
+  const k = sp('ausreden');
+  p.hand = [k, num(9)];
+  assert.equal(r.play(p.id, { ids: [k.id], choice: { targets: [p.id, t.id] } }).ok, true);
+  assert.deepEqual(p.hand.map((c) => c.value), [1, 2]);
+  assert.deepEqual(t.hand.map((c) => c.ability ?? c.value), [9, 'potato']);
+});
+
+test('😴 Mittagsschläfer: nächste Person setzt aus, alle geben 1 Karte weiter', () => {
+  const r = table(3);
+  const p = r.current();
+  for (const o of r.players) o.hand = [num(1), num(2)];
+  const z = sp('mittagsschlaefer');
+  p.hand.push(z);
+  const sleeper = r.seatFrom(p, 1);
+  assert.equal(r.play(p.id, [z.id]).ok, true);
+  assert.deepEqual(r.players.map((o) => o.hand.length), [2, 2, 2]);
+  assert.equal(r.current(), r.seatFrom(sleeper, 1));
+});
+
+test('🎧 Headset-Zocker: nochmal dran, alle anderen ziehen 1', () => {
+  const r = table(3);
+  const p = r.current();
+  for (const o of r.players) o.hand = [num(1)];
+  const h = sp('headset');
+  p.hand = [h, num(5)];
+  assert.equal(r.play(p.id, [h.id]).ok, true);
+  assert.equal(r.current(), p);
+  for (const o of r.players.filter((x) => x !== p)) assert.equal(o.hand.length, 2);
+});
+
+test('Spielerkarten aus dem Baukasten halten sich an die Effekt-Regeln', () => {
+  for (const [key, c] of Object.entries(PLAYER_CARDS)) {
+    if (c.effects) assert.deepEqual(validateEffects(c.effects), c.effects, key);
+  }
 });
 
 test('💬 Chat: Text wird gekürzt, Spam gebremst', () => {
