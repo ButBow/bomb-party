@@ -147,6 +147,7 @@ if (btnAlmanach && modalAlmanach) {
   modalAlmanach.onclick = (e) => {
     if (e.target === modalAlmanach) modalAlmanach.hidden = true;
   };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modalAlmanach.hidden = true; });
   document.querySelectorAll('.almanach-tabs .tab-btn').forEach((b) => {
     b.onclick = () => renderAlmanachTab(b.dataset.tab);
   });
