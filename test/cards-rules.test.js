@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 import { CardRoom } from '../server/cards/game.js';
 import { RULES, BASIC_SPECIALS, PLAYER_CARDS } from '../shared/cards.js';
 
-function table(n = 3) {
+// Rollen sind im Test neutral (Bürger*in) – sonst funken Gott, Pazifist & Co. zufällig dazwischen.
+// Wer die echten Zufallsrollen braucht: table(n, { randomRoles: true })
+function table(n = 3, { randomRoles = false } = {}) {
   const r = new CardRoom('t');
   for (let i = 0; i < n; i++) r.addPlayer('p' + i, { name: 'P' + i, special: { effects: [{ type: 'reset' }] } });
   assert.equal(r.start('p0').ok, true);
   r.introUntil = 0;   // Intro-Animation im Test überspringen
+  if (!randomRoles) for (const p of r.players) p.role = 'buerger';
   return r;
 }
 const num = (value) => ({ id: Math.random(), kind: 'number', value, color: '#fff' });
@@ -53,7 +56,8 @@ test('Start: mindestens 2 Leute, nur der Host, nicht doppelt', () => {
 
 test('Start: ab 5 Leuten liegen alle Zahlenkarten doppelt im Spiel', () => {
   const perSet = RULES.colors.length * (RULES.maxValue - RULES.minValue + 1);
-  const numbers = (r) => r.deck.length + r.players.reduce((s, p) => s + p.hand.filter((c) => c.kind === 'number').length, 0);
+  const isNum = (c) => c.kind === 'number';   // im Deck liegen auch übrige Specials
+  const numbers = (r) => r.deck.filter(isNum).length + r.players.reduce((s, p) => s + p.hand.filter(isNum).length, 0);
   assert.equal(numbers(table(4)), perSet);
   assert.equal(numbers(table(5)), perSet * 2);
 });

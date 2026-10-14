@@ -90,6 +90,14 @@ test('Keine Karten-ID doppelt zwischen Specials, Charakteren und Spielerkarten',
   assert.equal(keys.includes('custom'), false);   // „custom“ ist für selbstgebaute Bomben reserviert
 });
 
+test('Rollen-Fähigkeiten im Server prüfen echte Rollen-Schlüssel aus ROLES', () => {
+  // Fängt Tippfehler wie role === 'god', wenn die Rolle in ROLES 'gott' heißt – dann greift die Fähigkeit nie
+  const server = readFileSync(new URL('server/cards/game.js', root), 'utf8');
+  const used = new Set([...server.matchAll(/role === '(\w+)'/g)].map((m) => m[1]));
+  assert.ok(used.size > 0);
+  for (const key of used) assert.ok(ROLES[key], `server/cards/game.js prüft auf Rolle '${key}' – die gibt es in ROLES nicht`);
+});
+
 test('Rollen: sinnvolle Gewichte und nie weniger als 3 Startkarten', () => {
   for (const [key, r] of Object.entries(ROLES)) {
     assert.ok(r.name && r.emoji && r.text, key);

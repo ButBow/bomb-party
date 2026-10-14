@@ -136,7 +136,7 @@ export class CardRoom {
       p.role = pickRole();
       p.stats = { resonance: 0, pileCards: 0, drawnCards: 0, specials: 0 };
       // Ausgeloste Specials: Standardmäßig RULES.specialsStart (2), Erzmagier bekommt 3
-      const count = p.role === 'mage' ? 3 : (RULES.specialsStart || 2);
+      const count = p.role === 'magier' ? 3 : (RULES.specialsStart || 2);
       const drawnCards = [];
       // Garantierte Club- oder Charakterkarte pro Person (falls im Topf)
       const clubIdx = pot.findIndex((c) => (c.by || c.title) && c.owner !== p.id && !drawnCards.includes(c));
@@ -342,7 +342,7 @@ export class CardRoom {
     } else if (sp.ability === 'divineWrath') {
       const victim = opp(choice.target);
       if (victim) {
-        if (victim.role === 'god') {
+        if (victim.role === 'gott') {
           this.say(`☀️ ${victim.name} (Gott) ist immun gegen göttlichen Zorn – der Blitz wirft ${p.name} um (zieht 2)!`);
           this.draw(p, 2, { global: true, penalty: true });
         } else if (this.blocksWithAegis(victim, p)) {
@@ -532,7 +532,7 @@ export class CardRoom {
       // 👑 Zwei beliebige Personen (auch man selbst) tauschen die Hände – kein Schelm kontert.
       // Gott und die Aegis schützen trotzdem, die Kartoffel bleibt bei der Person, die sie hält.
       const [a, b] = choice.targets.map(anyone);
-      const god = [a, b].find((x) => x !== p && x.role === 'god');
+      const god = [a, b].find((x) => x !== p && x.role === 'gott');
       const shielded = !god && [a, b].find((x) => this.blocksWithAegis(x, p));
       if (god) {
         this.say(`☀️ ${god.name} (Gott) lässt sich auch vom König nichts sagen – kein Tausch!`);
@@ -548,7 +548,7 @@ export class CardRoom {
       }
     }
     for (const e of sp.effects ?? []) this.runEffect(p, e, ctx);
-    if (p.role === 'demigod' && !ctx.again) {
+    if (p.role === 'junggott' && !ctx.again) {
       ctx.again = true;
       this.say(`⚡ ${p.name} (Junger Gott) entfesselt Himmelsblitz: Ist sofort noch einmal dran!`);
     }
@@ -563,7 +563,7 @@ export class CardRoom {
     const valid = allowed.length ? allowed : others;      // zu zweit geht's notfalls doch zurück
     const t = valid.find((o) => o.id === targetId);
     if (!t) return { error: targetId === potato.cameFrom ? 'Nicht zurück an die Person, von der du sie hast!' : 'Wähle, wer die Kartoffel bekommt.' };
-    if (t.role === 'god') {
+    if (t.role === 'gott') {
       this.say(`☀️ ${t.name} (Gott) verbrennt die Heiße Kartoffel mit heiligem Licht – sie fällt in den Ziehstapel!`);
       p.hand = p.hand.filter((c) => c !== potato);
       delete potato.cameFrom;
@@ -596,7 +596,7 @@ export class CardRoom {
     if (!t || n <= 0) return;
     const isPenalty = penalty || Boolean(from && t !== from);
     if (from && t !== from) {
-      if (t.role === 'god' && !global) {
+      if (t.role === 'gott' && !global) {
         this.say(`☀️ ${t.name} (Gott) ist erhaben – Göttliches Karma zwingt ${from.name}, stattdessen ${n} Karten zu ziehen!`);
         return this.draw(from, n, { global: true, noReflect: true, penalty: true });
       }
@@ -745,7 +745,7 @@ export class CardRoom {
     if (p && p.role === 'held' && p.hand.length <= 2 && cards.every((c) => c.kind === 'number')) {
       return null; // 🦸 Heldenmut: Darf jede Zahl auf jede Zahl legen
     }
-    if (p && p.role === 'gambler' && cards.every((c) => c.kind === 'number') && this.top > 0) {
+    if (p && p.role === 'gluecksspieler' && cards.every((c) => c.kind === 'number') && this.top > 0) {
       const v = cards[0].value;
       if ((v % 2) !== (this.top % 2)) return null; // 🎲 Gezinkte Würfel: Ungerade auf gerade (oder umgekehrt) klappt immer
     }
@@ -908,7 +908,7 @@ export class CardRoom {
         break;
       case 'give':
         for (const t of targets) {
-          if (t.role === 'god' && p !== t) { this.say(`☀️ ${t.name} (Gott) weist unerwünschte Gaben zurück!`); continue; }
+          if (t.role === 'gott' && p !== t) { this.say(`☀️ ${t.name} (Gott) weist unerwünschte Gaben zurück!`); continue; }
           if (!global && this.reflects(t, p)) { this.say(`😆 ${t.name} lacht zuletzt – ${p.name} behält die Karten.`); continue; }
           for (let i = 0; i < e.n; i++) {
             const pool = tradable(p.hand);
@@ -922,7 +922,7 @@ export class CardRoom {
         break;
       case 'takePile':
         for (const t of targets) {
-          if (t.role === 'god') {
+          if (t.role === 'gott') {
             this.say(`☀️ ${t.name} (Gott) gebietet über die Ordnung – Stapel-Kassieren prallt ab!`);
             continue;
           }
@@ -939,7 +939,7 @@ export class CardRoom {
         break;
       case 'swap':
         for (const t of targets) {
-          if (t.role === 'god') {
+          if (t.role === 'gott') {
             this.say(`☀️ ${t.name} (Gott) steht über irdischem Besitz – Hand-Tausch prallt ab!`);
             continue;
           }
@@ -975,7 +975,7 @@ export class CardRoom {
   }
 
   triggerNecromancer() {
-    for (const n of this.active().filter((o) => o.role === 'necromancer')) {
+    for (const n of this.active().filter((o) => o.role === 'nekromant')) {
       if (this.deck.length > 0) {
         const soul = this.deck.pop();
         n.hand.push(soul);
